@@ -1,0 +1,46 @@
+name: Continuous Deployment
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  deploy-staging:
+    if: github.ref == 'refs/heads/develop'
+    runs-on: ubuntu-latest
+    environment: staging
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Deploy to staging
+      run: |
+        echo "Deploying to staging environment..."
+        # Add your staging deployment commands here
+        # Example: SSH to staging server, pull latest code, restart services
+
+  deploy-production:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: production
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Build Docker images
+      run: |
+        docker build -t c0ll3ct1v3-backend ./backend
+        docker build -t c0ll3ct1v3-frontend ./frontend
+    
+    - name: Deploy to production
+      run: |
+        echo "Deploying to production environment..."
+        # Add your production deployment commands here
+        # Example: SSH to production server, pull latest code, restart services
+    
+    - name: Health check
+      run: |
+        echo "Running health checks..."
+        # Add health check commands here
+        # Example: curl http://your-domain.com/health
