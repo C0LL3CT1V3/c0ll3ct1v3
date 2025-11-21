@@ -1,0 +1,45 @@
+services:
+
+  backend:
+    build: ./backend
+    ports:
+      - "5000:8000"      # Dev backend on port 5000
+    volumes:
+      - ./backend:/app   # Hot reload
+    environment:
+      - DATABASE_URL=postgresql://postgres:dev_password@db:5432/collective
+      - DEBUG=true
+    depends_on:
+      - db
+  frontend:
+    build: ./frontend
+    ports:
+      - "80:3000"        # Direct access on port 80
+    volumes:
+      - ./frontend/src:/app/src   # Hot reload
+      - ./frontend/public:/app/public
+      - /app/node_modules         # Prevent overwriting node_modules
+    environment:
+      - NODE_ENV=development
+      - REACT_APP_API_URL=http://localhost:5000  # Dev API URL
+    command: npm start
+
+  
+
+  db:
+    image: postgres:13
+    ports:
+      - "5432:5432"      # Access DB from host tools
+    environment:
+      - POSTGRES_DB=collective
+      - POSTGRES_PASSWORD=dev_password
+    volumes:
+      - ./db:/var/lib/postgresql/data
+
+  # Optional: Add dev tools
+  adminer:
+    image: adminer
+    ports:
+      - "8080:8080"
+    depends_on:
+      - db
