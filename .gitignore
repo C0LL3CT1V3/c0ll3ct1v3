@@ -3,7 +3,8 @@
 .env.local
 .env.production
 .env.staging
-
+#c0ll3ct1v3
+c0ll3ct1v3/
 # Python
 __pycache__/
 *.py[cod]

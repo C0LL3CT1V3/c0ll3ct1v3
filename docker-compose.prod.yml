@@ -1,89 +1,31 @@
 services:
-  nginx:
-    image: nginx:alpine
+  backend:
+    build: ./backend
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://postgres:dev_password@db:5432/collective
+    depends_on:
+      - db
+
+  frontend:
+    build:
+      context: .
+      dockerfile: ./frontend/Dockerfile.prod
     ports:
       - "80:80"
       - "443:443"
     volumes:
-      - ./infrastructure/docker/nginx.conf:/etc/nginx/nginx.conf
-      - ./infrastructure/docker/ssl:/etc/nginx/ssl
-      - frontend_build:/usr/share/nginx/html
+      - ./infrastructure/ssl:/etc/nginx/ssl  # Mount SSL certificates (for updates without rebuild)
     depends_on:
       - backend
-    restart: unless-stopped
 
-  backend:
-    build: 
-      context: ./backend
-      dockerfile: Dockerfile.prod
-    environment:
-      - DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/c0ll3ct1v3
-      - SECRET_KEY=${SECRET_KEY}
-    depends_on:
-      - postgres
-      - redis
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-
-  postgres:
+  db:
     image: postgres:13
-    environment:
-      - POSTGRES_DB=c0ll3ct1v3
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-      - ./infrastructure/scripts/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  redis:
-    image: redis:alpine
-    volumes:
-      - redis_data:/data
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 3
-
-  prometheus:
-    image: prom/prometheus
     ports:
-      - "9090:9090"
-    volumes:
-      - ./infrastructure/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
-      - prometheus_data:/prometheus
-    command:
-      - '--config.file=/etc/prometheus/prometheus.yml'
-      - '--storage.tsdb.path=/prometheus'
-      - '--web.console.libraries=/etc/prometheus/console_libraries'
-      - '--web.console.templates=/etc/prometheus/consoles'
-      - '--web.enable-lifecycle'
-    restart: unless-stopped
-
-  grafana:
-    image: grafana/grafana
-    ports:
-      - "3001:3000"
+      - "5432:5432"
     environment:
-      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD}
+      - POSTGRES_DB=collective
+      - POSTGRES_PASSWORD=dev_password
     volumes:
-      - grafana_data:/var/lib/grafana
-    restart: unless-stopped
-
-volumes:
-  postgres_data:
-  redis_data:
-  prometheus_data:
-  grafana_data:
-  frontend_build:
+      - ./db_prod:/var/lib/postgresql/data  # Separate volume for prod
