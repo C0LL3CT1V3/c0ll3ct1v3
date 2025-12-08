@@ -1,0 +1,50 @@
+services:
+
+  backend:
+    build: ./backend
+    ports:
+      - "8080:8080"      # Dev backend on port 8080
+    volumes:
+      - ./backend:/app   # Hot reload
+    environment:
+      - DATABASE_URL=postgresql://postgres:dev_password@db:5432/collective
+      - DEBUG=true
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8080 --reload
+    depends_on:
+      - db
+  frontend:
+    build: ./frontend
+    ports:
+      - "3030:3000"        # Direct access on port 3030
+    volumes:
+      - ./frontend/src:/app/src   # Hot reload
+      - ./frontend/public:/app/public
+      - /app/node_modules         # Prevent overwriting node_modules
+    environment:
+      - NODE_ENV=development
+      - REACT_APP_API_URL=http://localhost:8080  # Dev API URL
+      - CHOKIDAR_USEPOLLING=true  # Enable polling for file changes in Docker
+      - WDS_SOCKET_HOST=localhost
+      - WDS_SOCKET_PORT=3030
+      
+    command: npm start
+
+  
+
+  db:
+    image: postgres:13
+    ports:
+      - "5433:5432"      # Access DB from host tools
+    environment:
+      - POSTGRES_DB=collective
+      - POSTGRES_PASSWORD=dev_password
+    volumes:
+      - ./db:/var/lib/postgresql/data
+
+  # Optional: Add dev tools
+  adminer:
+    image: adminer
+    ports:
+      - "7070:7070"
+    depends_on:
+      - db
