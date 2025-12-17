@@ -8,14 +8,23 @@ import Ledgers from './pages/Ledgers';
 import Documents from './pages/Documents';
 import ProtectedRoute from './components/ProtectedRoute';
 
-// Helper function to convert kebab-case/snake_case to PascalCase
-// Example: "example-page" or "example_page" -> "ExamplePage"
-function toPascalCase(str) {
-  if (!str) return '';
-  return str
+// Helper function to convert subdomain to possible page name formats
+// Returns an array of possible names to check (PascalCase, lowercase, etc.)
+function getPossiblePageNames(subdomain) {
+  if (!subdomain) return [];
+  
+  // Convert to PascalCase (e.g., "archie" -> "Archie")
+  const pascalCase = subdomain
     .split(/[-_]/)
     .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-    .join('') + 'Page';
+    .join('');
+  
+  // Return possible variations
+  return [
+    pascalCase,           // "Archie"
+    subdomain.toLowerCase(), // "archie"
+    pascalCase + 'Page',  // "ArchiePage" (in case some files use this convention)
+  ];
 }
 
 // Helper function to get subdomain from hostname
@@ -44,21 +53,28 @@ function App() {
     const subdomain = getSubdomain();
     
     if (subdomain) {
-      // Convert subdomain to PascalCase page name (e.g., "example" -> "ExamplePage")
-      const pageName = toPascalCase(subdomain);
+      // Get possible page name variations
+      const possibleNames = getPossiblePageNames(subdomain);
       
-      // Check if the page exists
-      if (availablePages.includes(pageName)) {
+      // Find the actual page name that exists in availablePages
+      // Check case-insensitively to handle variations
+      const foundPageName = availablePages.find(pageName => 
+        possibleNames.some(possible => 
+          pageName.toLowerCase() === possible.toLowerCase()
+        )
+      );
+      
+      if (foundPageName) {
         try {
-          // Dynamically import only the matching page
-          const pageModule = customPagesContext(`./${pageName}.js`);
+          // Dynamically import using the actual filename
+          const pageModule = customPagesContext(`./${foundPageName}.js`);
           setSubdomainPage(pageModule.default);
         } catch (error) {
           console.error(`Failed to load page for subdomain "${subdomain}":`, error);
           setSubdomainPage(null);
         }
       } else {
-        console.log(`No page found for subdomain "${subdomain}" (looking for ${pageName}.js)`);
+        console.log(`No page found for subdomain "${subdomain}" (tried: ${possibleNames.join(', ')})`);
         setSubdomainPage(null);
       }
     } else {
