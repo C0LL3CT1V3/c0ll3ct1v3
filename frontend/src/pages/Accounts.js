@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import axios from 'axios';
+import { useApiClient } from '../hooks/useApiClient';
 
 function Accounts() {
+  const apiClient = useApiClient();
   const [accounts, setAccounts] = useState([]);
   const [showForm, setShowForm] = useState(false);
+  const [error, setError] = useState('');
   const [formData, setFormData] = useState({
     account_name: '',
     bank_name: '',
@@ -20,17 +22,19 @@ function Accounts() {
 
   const fetchAccounts = async () => {
     try {
-      const response = await axios.get('/accounts/');
+      const response = await apiClient.get('/accounts/');
       setAccounts(response.data);
+      setError('');
     } catch (error) {
       console.error('Error fetching accounts:', error);
+      setError(error?.response?.data?.detail || 'Failed to load accounts.');
     }
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      await axios.post('/accounts/', formData);
+      await apiClient.post('/accounts/', formData);
       setShowForm(false);
       setFormData({
         account_name: '',
@@ -43,6 +47,7 @@ function Accounts() {
       fetchAccounts();
     } catch (error) {
       console.error('Error creating account:', error);
+      setError(error?.response?.data?.detail || 'Failed to create account.');
     }
   };
 
@@ -57,6 +62,7 @@ function Accounts() {
       </nav>
 
       <h1>Bank Accounts</h1>
+      {error ? <div className="error-message">{error}</div> : null}
       
       <button className="btn" onClick={() => setShowForm(!showForm)}>
         {showForm ? 'Cancel' : 'Add New Account'}
@@ -122,7 +128,12 @@ function Accounts() {
               type="number"
               step="0.01"
               value={formData.current_balance}
-              onChange={(e) => setFormData({...formData, current_balance: parseFloat(e.target.value)})}
+              onChange={(e) =>
+                setFormData({
+                  ...formData,
+                  current_balance: e.target.value === '' ? 0 : parseFloat(e.target.value),
+                })
+              }
             />
           </div>
           

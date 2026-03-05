@@ -19,6 +19,9 @@ class UserUpdate(BaseModel):
 
 class User(UserBase):
     id: int
+    auth0_sub: Optional[str] = None
+    email_verified: bool = False
+    onboarding_completed: bool = False
     is_active: bool
     created_at: datetime
     updated_at: Optional[datetime] = None
@@ -31,4 +34,4 @@ class Token(BaseModel):
     token_type: str
 
 class TokenData(BaseModel):
-    email: Optional[str] = None
+    sub: Optional[str] = None

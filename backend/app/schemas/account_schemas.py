@@ -20,6 +20,7 @@ class BankAccountUpdate(BaseModel):
 
 class BankAccount(BankAccountBase):
     id: int
+    user_id: int
     is_active: bool
     created_at: datetime
     updated_at: Optional[datetime] = None

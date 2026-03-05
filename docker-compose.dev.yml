@@ -6,8 +6,11 @@ services:
       - "8080:8080"      # Dev backend on port 8080
     volumes:
       - ./backend:/app   # Hot reload
+    env_file:
+      - ./backend/.env
     environment:
       - DATABASE_URL=postgresql://postgres:dev_password@db:5432/collective
+      - CORS_ORIGINS=http://localhost:3030
       - DEBUG=true
     command: uvicorn app.main:app --host 0.0.0.0 --port 8080 --reload
     depends_on:
@@ -20,6 +23,8 @@ services:
       - ./frontend/src:/app/src   # Hot reload
       - ./frontend/public:/app/public
       - /app/node_modules         # Prevent overwriting node_modules
+    env_file:
+      - ./frontend/.env
     environment:
       - NODE_ENV=development
       - REACT_APP_API_URL=http://localhost:8080  # Dev API URL
@@ -45,6 +50,6 @@ services:
   adminer:
     image: adminer
     ports:
-      - "7070:7070"
+      - "7070:8080"
     depends_on:
       - db

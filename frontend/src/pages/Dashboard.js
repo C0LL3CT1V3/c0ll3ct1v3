@@ -1,12 +1,40 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { authService } from '../services/authService';
+import { useAuth0 } from '@auth0/auth0-react';
+import { useApiClient } from '../hooks/useApiClient';
 
 function Dashboard() {
-  const user = authService.getStoredUser();
+  const { user: auth0User, logout } = useAuth0();
+  const apiClient = useApiClient();
+  const [appUser, setAppUser] = useState(null);
+  const [sessionError, setSessionError] = useState('');
+
+  useEffect(() => {
+    let isMounted = true;
+    const loadSession = async () => {
+      try {
+        const response = await apiClient.get('/auth/session');
+        if (isMounted) {
+          setAppUser(response.data);
+        }
+      } catch (error) {
+        if (isMounted) {
+          setSessionError(error?.response?.data?.detail || 'Failed to load session profile.');
+        }
+      }
+    };
+    loadSession();
+    return () => {
+      isMounted = false;
+    };
+  }, [apiClient]);
   
   const handleLogout = () => {
-    authService.logout();
+    logout({
+      logoutParams: {
+        returnTo: window.location.origin,
+      },
+    });
   };
 
   return (
@@ -18,10 +46,11 @@ function Dashboard() {
         <Link to="/ledgers">Ledgers</Link>
         <Link to="/documents">Documents</Link>
         <div className="nav-user">
-          <span>Welcome, {user?.name}</span>
+          <span>Welcome, {appUser?.name || auth0User?.name || auth0User?.email || 'User'}</span>
           <button onClick={handleLogout} className="logout-btn">Logout</button>
         </div>
       </nav>
+      {sessionError ? <div className="error-message">{sessionError}</div> : null}
       
       <div className="tv-container">
         <div className="tv-console">

@@ -1,14 +1,31 @@
-import React from 'react';
-import { Navigate } from 'react-router-dom';
-import { authService } from '../services/authService';
+import React, { useEffect } from 'react';
+import { useAuth0 } from '@auth0/auth0-react';
+import { useLocation } from 'react-router-dom';
 
 function ProtectedRoute({ children }) {
-  const isAuthenticated = authService.isAuthenticated();
-  
-  if (!isAuthenticated) {
-    return <Navigate to="/" replace />;
+  const { isAuthenticated, isLoading, loginWithRedirect } = useAuth0();
+  const location = useLocation();
+  const shouldRedirect = !isLoading && !isAuthenticated;
+
+  useEffect(() => {
+    if (!shouldRedirect) {
+      return;
+    }
+    loginWithRedirect({
+      authorizationParams: {
+        redirect_uri: `${window.location.origin}${location.pathname}`,
+      },
+    });
+  }, [shouldRedirect, location.pathname, loginWithRedirect]);
+
+  if (isLoading) {
+    return <div className="App">Loading authentication...</div>;
   }
-  
+
+  if (shouldRedirect) {
+    return <div className="App">Redirecting to login...</div>;
+  }
+
   return children;
 }
 
