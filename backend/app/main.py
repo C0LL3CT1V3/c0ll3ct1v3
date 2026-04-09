@@ -8,6 +8,9 @@ from .config import settings
 from .database import Base, engine
 from .models import account, document, ledger, user, wallet
 
+from .finance_integrations.router import router as finance_router
+from .finance_integrations.validation import validate_finance_production_config
+
 app = FastAPI(title="C0ll3CT1V3 Business Management System", version="1.0.0")
 
 # CORS middleware
@@ -22,6 +25,8 @@ app.add_middleware(
 # Include routers
 app.include_router(accounts_router)
 app.include_router(auth_router)
+if settings.finance_integrations_enabled:
+    app.include_router(finance_router)
 
 Base.metadata.create_all(bind=engine)
 
@@ -66,6 +71,15 @@ def _run_schema_migrations() -> None:
 
 
 _run_schema_migrations()
+
+@app.on_event("startup")
+def _validate_finance_production_config() -> None:
+    if not settings.finance_integrations_enabled:
+        return
+    errors = validate_finance_production_config()
+    if errors:
+        raise RuntimeError("Finance production configuration invalid: " + "; ".join(errors))
+
 
 @app.get("/")
 async def root():

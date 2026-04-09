@@ -74,3 +74,13 @@ The frontend will be available at `http://localhost:3000`
 - `backend/` - Python FastAPI backend
 - `frontend/` - React frontend
 - `shared/` - Docker configuration and shared files
+
+
+## Finance and accounting integrations
+
+- **API:** Plaid link token / token exchange, item disconnect, and Plaid + Square webhooks under `/api/finance/` (MFA-gated for sensitive actions when enabled in `.env`).
+- **Docs:** Compliance and runbooks live in [docs/finance-compliance/](docs/finance-compliance/) (no secrets).
+- **Local books CLI:** SQLite-oriented tools in [backend/accounting_core/](backend/accounting_core/) — see [docs/ACCOUNTING_TOOLS.md](docs/ACCOUNTING_TOOLS.md).
+- **Samples:** [samples/](samples/) holds **synthetic** CSVs only.
+
+Never commit customer transaction exports, live `.env` files, or tax outputs with PII. See [SECURITY.md](SECURITY.md).
