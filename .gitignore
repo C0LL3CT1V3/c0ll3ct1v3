@@ -5,6 +5,17 @@
 .env.staging
 #c0ll3ct1v3
 c0ll3ct1v3/
+# Python virtual environments (never commit)
+venv/
+.venv/
+backend/venv/
+
+# Local finance / tax data (never commit real customer exports)
+*.csv
+!samples/**/*.csv
+data/
+private-data/
+
 # Python
 __pycache__/
 *.py[cod]
@@ -78,3 +89,5 @@ Thumbs.db
 # Monitoring data
 prometheus_data/
 grafana_data/
+backend/.venv/
+backend/var/
