@@ -33,10 +33,15 @@ const getSubdomain = () => {
   const parts = host.split('.');
   if (parts[0] === 'localhost' || parts[0] === '127') {
     // Handle localhost:3000 or sub.localhost:3000
-    return parts[1]?.split(':')[0] || '';
+    const sub = parts[1]?.split(':')[0] || '';
+    return sub.toLowerCase() === 'www' ? '' : sub;
   }
-  // Handle production: app.example.com -> "app"
-  return parts.length > 2 ? parts[0] : '';
+  // Handle production: app.example.com -> "app" (www is not a tenant subdomain)
+  if (parts.length > 2) {
+    const first = parts[0].split(':')[0];
+    return first.toLowerCase() === 'www' ? '' : first;
+  }
+  return '';
 };
 
 // Get available custom pages context
