@@ -49,8 +49,12 @@ root.render(
           audience: auth0Audience,
           scope: process.env.REACT_APP_AUTH0_SCOPE || 'openid profile email',
         }}
-        cacheLocation="memory"
-        useRefreshTokens={true}
+        cacheLocation="localstorage"
+        useRefreshTokens={false}
+        onRedirectCallback={(appState) => {
+          const returnTo = appState?.returnTo || '/portal';
+          window.location.assign(returnTo);
+        }}
       >
         <App />
       </Auth0Provider>

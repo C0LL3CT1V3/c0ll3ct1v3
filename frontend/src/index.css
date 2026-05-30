@@ -614,3 +614,129 @@ code {
   cursor: not-allowed;
   transform: none !important;
 }
+
+/* Creative media admin */
+.admin-media-subtitle {
+  color: #555;
+  margin-bottom: 1.5rem;
+}
+
+.admin-media-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1.2fr;
+  gap: 1.5rem;
+  text-align: left;
+}
+
+@media (max-width: 960px) {
+  .admin-media-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.admin-media-upload select,
+.admin-media-detail input,
+.admin-media-detail textarea {
+  display: block;
+  width: 100%;
+  margin: 0.5rem 0 1rem;
+  padding: 0.5rem;
+  box-sizing: border-box;
+}
+
+.media-dropzone {
+  border: 2px dashed #888;
+  border-radius: 8px;
+  padding: 2rem;
+  text-align: center;
+  background: #fafafa;
+}
+
+.media-dropzone--active {
+  border-color: #282c34;
+  background: #eef2ff;
+}
+
+.media-file-label input[type="file"] {
+  display: none;
+}
+
+.media-asset-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.media-asset-item {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  width: 100%;
+  text-align: left;
+  padding: 0.75rem;
+  margin-bottom: 0.5rem;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  background: #fff;
+  cursor: pointer;
+}
+
+.media-asset-item--active {
+  border-color: #282c34;
+  background: #f0f4ff;
+}
+
+.media-asset-title {
+  flex: 1 1 100%;
+  font-weight: 600;
+}
+
+.media-status {
+  font-size: 0.75rem;
+  padding: 0.15rem 0.5rem;
+  border-radius: 4px;
+  background: #eee;
+}
+
+.media-status--published {
+  background: #d4edda;
+}
+
+.media-status--processing {
+  background: #fff3cd;
+}
+
+.media-type {
+  font-size: 0.75rem;
+  color: #666;
+}
+
+.admin-media-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 1rem 0;
+}
+
+.retro-btn--danger {
+  background: #721c24;
+  color: #fff;
+}
+
+.upload-progress {
+  margin-top: 1rem;
+  font-size: 0.9rem;
+  color: #333;
+}
+
+.media-versions {
+  margin-top: 1.5rem;
+  font-size: 0.9rem;
+}
+
+.media-version-block {
+  border-top: 1px solid #eee;
+  padding-top: 0.75rem;
+  margin-top: 0.75rem;
+}

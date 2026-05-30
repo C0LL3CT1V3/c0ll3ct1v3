@@ -1,0 +1,23 @@
+# Pinned base + apt sandbox workaround: some hosts see apt/dpkg SIGSEGV (exit 139) during
+# "Building dependency tree" inside Docker unless the sandbox user is relaxed for the build.
+FROM python:3.11-slim-bookworm
+
+WORKDIR /app
+
+RUN printf 'APT::Sandbox::User "root";\n' > /etc/apt/apt.conf.d/99docker-apt \
+    && apt-get update \
+    && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+        ffmpeg \
+        curl \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY requirements.txt .
+RUN pip install --upgrade pip setuptools wheel \
+    && pip install --no-cache-dir -r requirements.txt
+
+COPY . .
+
+ENV PYTHONPATH=/app
+
+CMD ["sh", "-c", "rq worker --url \"${REDIS_URL:-redis://redis:6379/0}\" media_jobs"]

@@ -1,0 +1,22 @@
+# Fallback seed artists when Spotify is unavailable or returns thin results
+by_genre:
+  "Folk / Americana":
+    aspiration: ["Jason Isbell", "Gregory Alan Isakov", "The Lumineers", "Tyler Childers"]
+    engagement: ["Caamp", "Watchhouse", "Benjamin Tod", "The Local Honeys"]
+    peer: ["Mapache", "S.G. Goodman", "Willi Carlisle"]
+  "Outlaw Country":
+    aspiration: ["Sturgill Simpson", "Chris Stapleton", "Colter Wall"]
+    engagement: ["Charley Crockett", "Wyatt Flores", "Red Clay Strays", "Mickey Lamantia"]
+    peer: ["Gabe Lee", "Riddy Arman", "Kaitlin Butts"]
+  "Indie Rock / Alternative":
+    aspiration: ["The National", "Bon Iver", "Big Thief"]
+    engagement: ["MJ Lenderman", "Wednesday", "Hiss Golden Messenger"]
+    peer: ["Florry", "Been Stellar"]
+  "Country / Heartland Rock":
+    aspiration: ["Turnpike Troubadours", "Zach Bryan"]
+    engagement: ["Cody Jinks", "Ashley McBryde", "Bryan Martin"]
+    peer: ["Zach Top"]
+  "Singer-Songwriter":
+    aspiration: ["Ray LaMontagne", "Iron & Wine"]
+    engagement: ["Noah Kahan", "Sierra Ferrell", "Ruston Kelly"]
+    peer: ["Jake Kohn"]

@@ -5,7 +5,7 @@ import { useApiClient } from '../hooks/useApiClient';
 
 function Dashboard() {
   const { user: auth0User, logout } = useAuth0();
-  const apiClient = useApiClient();
+  const { apiClient } = useApiClient();
   const [appUser, setAppUser] = useState(null);
   const [sessionError, setSessionError] = useState('');
 
@@ -45,6 +45,7 @@ function Dashboard() {
         <Link to="/wallets">Crypto Wallets</Link>
         <Link to="/ledgers">Ledgers</Link>
         <Link to="/documents">Documents</Link>
+        <Link to="/admin/media">Creative Media</Link>
         <div className="nav-user">
           <span>Welcome, {appUser?.name || auth0User?.name || auth0User?.email || 'User'}</span>
           <button onClick={handleLogout} className="logout-btn">Logout</button>
@@ -81,6 +82,12 @@ function Dashboard() {
                   <h3>Documents</h3>
                   <p>Store and manage your business documents.</p>
                   <Link to="/documents" className="retro-btn">Manage Documents</Link>
+                </div>
+
+                <div className="screen-panel">
+                  <h3>Creative Media</h3>
+                  <p>Upload masters, tag assets, and publish to the Phillip James EPK.</p>
+                  <Link to="/admin/media" className="retro-btn">Media Library</Link>
                 </div>
               </div>
             </div>

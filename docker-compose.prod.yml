@@ -10,8 +10,27 @@ services:
     environment:
       - DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD:-change_me}@db:5432/collective
       - CORS_ORIGINS=${CORS_ORIGINS:-https://c0ll3ct1v3.xyz,https://www.c0ll3ct1v3.xyz}
+      - REDIS_URL=redis://redis:6379/0
     depends_on:
       - db
+      - redis
+
+  media-worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.worker
+    env_file:
+      - ./backend/.env
+    environment:
+      - DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD:-change_me}@db:5432/collective
+      - REDIS_URL=redis://redis:6379/0
+    depends_on:
+      - db
+      - redis
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
 
   frontend:
     build:

@@ -12,8 +12,9 @@ function ProtectedRoute({ children }) {
       return;
     }
     loginWithRedirect({
+      appState: { returnTo: `${location.pathname}${location.search}` },
       authorizationParams: {
-        redirect_uri: `${window.location.origin}${location.pathname}`,
+        redirect_uri: window.location.origin,
       },
     });
   }, [shouldRedirect, location.pathname, loginWithRedirect]);

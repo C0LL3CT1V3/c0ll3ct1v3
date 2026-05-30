@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { useApiClient } from '../hooks/useApiClient';
 
 function Accounts() {
-  const apiClient = useApiClient();
+  const { apiClient } = useApiClient();
   const [accounts, setAccounts] = useState([]);
   const [showForm, setShowForm] = useState(false);
   const [error, setError] = useState('');

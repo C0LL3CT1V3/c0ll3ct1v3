@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react';
+import { useMemo } from 'react';
 import axios from 'axios';
 import { useAuth0 } from '@auth0/auth0-react';
 
@@ -12,34 +12,51 @@ function isMfaError(error) {
     && ['mfa_required', 'mfa_reauthentication_required'].includes(error?.response?.data?.detail);
 }
 
+async function attachAccessToken(getAccessTokenSilently, config) {
+  const token = await getAccessTokenSilently({
+    authorizationParams: {
+      audience: AUTH0_AUDIENCE,
+      scope: AUTH0_SCOPE,
+    },
+  });
+  config.headers = config.headers || {};
+  config.headers.Authorization = `Bearer ${token}`;
+  return config;
+}
+
+/**
+ * Axios client with Auth0 bearer tokens.
+ * Interceptors are registered in useMemo so the first request after login includes auth
+ * (useEffect-based interceptors race child components that fetch on mount).
+ */
 export function useApiClient() {
-  const { getAccessTokenSilently, loginWithPopup } = useAuth0();
+  const { getAccessTokenSilently, loginWithPopup, isAuthenticated, isLoading } = useAuth0();
 
   const apiClient = useMemo(() => {
-    return axios.create({
+    const client = axios.create({
       baseURL: API_BASE_URL,
       headers: {
         'Content-Type': 'application/json',
       },
     });
-  }, []);
 
-  useEffect(() => {
-    const requestInterceptor = apiClient.interceptors.request.use(async (config) => {
-      const token = await getAccessTokenSilently({
-        authorizationParams: {
-          audience: AUTH0_AUDIENCE,
-          scope: AUTH0_SCOPE,
-        },
-      });
-      config.headers.Authorization = `Bearer ${token}`;
-      return config;
-    });
+    client.interceptors.request.use(async (config) => attachAccessToken(getAccessTokenSilently, config));
 
-    const responseInterceptor = apiClient.interceptors.response.use(
+    client.interceptors.response.use(
       (response) => response,
       async (error) => {
         const originalRequest = error.config || {};
+
+        if (error?.response?.status === 401 && !originalRequest.__authRetry) {
+          originalRequest.__authRetry = true;
+          try {
+            await attachAccessToken(getAccessTokenSilently, originalRequest);
+            return client(originalRequest);
+          } catch {
+            /* fall through */
+          }
+        }
+
         if (isMfaError(error) && !originalRequest.__mfaRetry) {
           originalRequest.__mfaRetry = true;
           await loginWithPopup({
@@ -50,26 +67,18 @@ export function useApiClient() {
               prompt: 'login',
             },
           });
-          const refreshedToken = await getAccessTokenSilently({
-            authorizationParams: {
-              audience: AUTH0_AUDIENCE,
-              scope: AUTH0_SCOPE,
-            },
-          });
-          originalRequest.headers = originalRequest.headers || {};
-          originalRequest.headers.Authorization = `Bearer ${refreshedToken}`;
-          return apiClient(originalRequest);
+          await attachAccessToken(getAccessTokenSilently, originalRequest);
+          return client(originalRequest);
         }
+
         return Promise.reject(error);
       },
     );
 
-    return () => {
-      apiClient.interceptors.request.eject(requestInterceptor);
-      apiClient.interceptors.response.eject(responseInterceptor);
-    };
-  }, [apiClient, getAccessTokenSilently, loginWithPopup]);
+    return client;
+  }, [getAccessTokenSilently, loginWithPopup]);
 
-  return apiClient;
+  const authReady = isAuthenticated && !isLoading;
+
+  return { apiClient, authReady };
 }
-

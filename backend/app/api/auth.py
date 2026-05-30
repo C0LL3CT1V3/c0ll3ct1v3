@@ -1,4 +1,5 @@
 from datetime import timedelta
+import hashlib
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -58,10 +59,12 @@ def _provision_or_bind_user(db: Session, auth_context: AuthContext) -> User:
             return by_email
 
     # First login -> provision
+    # bcrypt has a 72-byte input limit; Auth0 subject can exceed this length.
+    disabled_password_seed = hashlib.sha256(auth_context.sub.encode("utf-8")).hexdigest()[:48]
     provisioned = User(
         name=auth_context.name or (auth_context.email.split("@")[0] if auth_context.email else "User"),
         email=auth_context.email or f"{auth_context.sub}@auth0.local",
-        hashed_password=get_password_hash(f"auth0-disabled-{auth_context.sub}"),
+        hashed_password=get_password_hash(disabled_password_seed),
         auth0_sub=auth_context.sub,
         email_verified=auth_context.email_verified,
         onboarding_completed=False,

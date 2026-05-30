@@ -4,19 +4,26 @@ from sqlalchemy import inspect, text
 
 from .api.accounts import router as accounts_router
 from .api.auth import router as auth_router
+from .api.artists.router import router as artists_router
+from .api.epk.router import router as epk_router
+from .api.epk.design_router import router as epk_design_router
+from .api.manager.router import router as manager_router
+from .api.media.router import router as media_router
+from .api.music.router import router as music_router
 from .config import settings
 from .database import Base, engine
-from .models import account, document, ledger, user, wallet
+from .models import account, artist, document, ledger, media, user, wallet
 
 from .finance_integrations.router import router as finance_router
 from .finance_integrations.validation import validate_finance_production_config
 
 app = FastAPI(title="C0ll3CT1V3 Business Management System", version="1.0.0")
 
-# CORS middleware
+# CORS middleware — apex portal origins + regex for artist EPK subdomains (*.localhost dev, *.c0ll3ct1v3.xyz prod)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[origin.strip() for origin in settings.cors_origins.split(",") if origin.strip()],
+    allow_origins=settings.cors_origin_list(),
+    allow_origin_regex="|".join(settings.cors_origin_regex_list()),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -25,10 +32,51 @@ app.add_middleware(
 # Include routers
 app.include_router(accounts_router)
 app.include_router(auth_router)
+app.include_router(media_router)
+app.include_router(artists_router)
+app.include_router(manager_router)
+app.include_router(epk_router)
+app.include_router(epk_design_router)
+app.include_router(music_router)
 if settings.finance_integrations_enabled:
     app.include_router(finance_router)
 
 Base.metadata.create_all(bind=engine)
+
+
+def _seed_default_artist() -> None:
+    """Ensure the primary tenant has a public EPK profile before first login."""
+    from .config import settings
+    from .database import SessionLocal
+    from .models.artist import Artist, default_epk_config
+
+    slug = settings.default_media_tenant_slug.strip().lower()
+    db = SessionLocal()
+    try:
+        if db.query(Artist).filter(Artist.tenant_slug == slug).first():
+            return
+        cfg = default_epk_config()
+        cfg.update(
+            {
+                "tagline": "Composer · Performer",
+                "bio": "Independent artist on c0ll3ct1v3.",
+                "booking_email": "booking@phillipjames.com",
+            }
+        )
+        db.add(
+            Artist(
+                auth0_sub=f"seed:{slug}",
+                tenant_slug=slug,
+                display_name="Phillip James",
+                epk_config=cfg,
+            )
+        )
+        db.commit()
+    finally:
+        db.close()
+
+
+_seed_default_artist()
 
 
 def _run_schema_migrations() -> None:

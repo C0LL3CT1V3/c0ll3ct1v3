@@ -1,0 +1,23 @@
+# Tier thresholds for Audience Mapper (edit per artist career stage)
+tiers:
+  aspiration:
+    label: Established — reach goals
+    min_followers: 500000
+    min_popularity: 65
+    max_per_tier: 8
+  engagement:
+    label: Up-and-coming — realistic engagement
+    min_followers: 15000
+    max_followers: 500000
+    min_popularity: 35
+    max_popularity: 65
+    max_per_tier: 8
+  peer:
+    label: Peer league — collaborators and local scene
+    max_followers: 100000
+    max_popularity: 45
+    max_per_tier: 8
+
+genre_score_threshold: 30
+max_related_per_seed: 5
+max_search_per_query: 5

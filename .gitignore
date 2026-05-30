@@ -92,3 +92,6 @@ prometheus_data/
 grafana_data/
 backend/.venv/
 backend/var/
+
+# Local Hermes agent config (skills live in ~/.hermes)
+.hermes/
