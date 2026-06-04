@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -73,6 +75,23 @@ class Settings(BaseSettings):
     spaces_public_endpoint: str = ""  # Browser-facing endpoint for presigned URLs (e.g. http://localhost:9000)
     media_cdn_base_url: str = ""  # Spaces CDN endpoint; omit to build from bucket + endpoint
     default_media_tenant_slug: str = "phillipjames"
+    # Shared secret for CLI / automation on /manager/* (Bearer + X-Tenant-Slug). Empty = disabled.
+    c0ll3ct1v3_agent_key: str = ""
+    # Scoped in-process manager agent (OpenRouter by default)
+    openrouter_api_key: str = ""
+    openrouter_model: str = ""  # alias; MANAGER_LLM_MODEL takes precedence
+    manager_llm_provider: str = ""  # openrouter | openai | anthropic | empty=auto
+    manager_llm_model: str = "anthropic/claude-3.5-haiku"
+    manager_llm_max_tokens: int = 900
+    manager_llm_timeout_seconds: int = 120
+    manager_chat_rate_limit_per_min: int = 20
+    # Manager agent tool dispatch: auto | native | prompt
+    # prompt = JSON tool object (best for Qwen + future fine-tuning); native = OpenRouter tools API
+    manager_tool_mode: str = "auto"
+    openai_api_key: str = ""
+    openai_model: str = "gpt-4o-mini"
+    anthropic_api_key: str = ""
+    anthropic_model: str = "claude-3-5-haiku-20241022"
     # Comma-separated. If user's email matches a marker, bind Auth0 → default tenant seed row instead of slug-2 spillover.
     primary_artist_claim_email_markers: str = "phillip,phillipjames.com"
     # Optional exact Auth0 subjects (comma-separated) that may claim the seeded default tenant workspace.
@@ -83,6 +102,15 @@ class Settings(BaseSettings):
     media_presigned_download_expires_seconds: int = 900
 
     redis_url: str = ""  # e.g. redis://redis:6379/0 for worker queue
+
+    # Cloud import OAuth (server-side only — users sign in via Google / Dropbox)
+    google_oauth_client_id: str = ""
+    google_oauth_client_secret: str = ""
+    dropbox_oauth_app_key: str = ""
+    dropbox_oauth_app_secret: str = ""
+    cloud_oauth_backend_base_url: str = "http://localhost:8000"
+    cloud_oauth_frontend_redirect_url: str = "http://localhost:3030/portal"
+    cloud_oauth_state_secret: str = ""
 
     # Audience mapper (Spotify Client Credentials + librosa)
     audience_analysis_enabled: bool = True
@@ -114,6 +142,9 @@ class Settings(BaseSettings):
         # Production artist sites: https://{slug}.c0ll3ct1v3.xyz
         patterns.append(r"https://[\w][\w-]*\.c0ll3ct1v3\.xyz$")
         return patterns
+
+    def manager_agent_scope_path(self) -> Path:
+        return Path(__file__).resolve().parent / "prompts" / "manager_agent_scope.md"
 
 
 settings = Settings()

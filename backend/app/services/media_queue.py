@@ -19,3 +19,16 @@ def enqueue_media_ingest_job(job_id: str) -> None:
         job_timeout=3600,
         result_ttl=0,
     )
+
+
+def enqueue_media_promote_job(job_id: str) -> None:
+    if not settings.redis_url:
+        return
+    connection = Redis.from_url(settings.redis_url)
+    queue = Queue("media_jobs", connection=connection)
+    queue.enqueue(
+        "app.worker_tasks.run_promote_job",
+        job_id,
+        job_timeout=3600,
+        result_ttl=0,
+    )

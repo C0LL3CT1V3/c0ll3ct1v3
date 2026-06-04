@@ -1,13 +1,28 @@
-"""Creative media (DAM) — metadata in Postgres, blobs in object storage."""
+"""Creative media (DAM) — metadata in Postgres, blobs in object storage.
+
+Workbench:
+- One ``MediaAsset`` per upload; masters live under ``workbench/``.
+- Optional ``vision_id`` groups assets in the portal UI.
+- ``status`` tracks ingest: inbox → processing → ready.
+"""
+
+from __future__ import annotations
 
 import uuid
 
 from sqlalchemy import BigInteger, Boolean, Column, DateTime, ForeignKey, Integer, String, Text
-from sqlalchemy import JSON as SAJSON  # SQLite + PostgreSQL via SQLAlchemy
+from sqlalchemy import JSON as SAJSON
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
 from ..database import Base
+
+# Workbench ingest lifecycle
+WORKBENCH_STATUSES = frozenset({"inbox", "processing", "ready", "archived"})
+# Gallery rows use ready; archived applies to soft-deleted workflow
+GALLERY_STATUSES = frozenset({"ready", "archived"})
+STORAGE_REGIONS = frozenset({"workbench", "gallery"})
+GALLERY_STAGE_RELEASED = "released"
 
 
 def _uuid() -> str:
@@ -15,19 +30,27 @@ def _uuid() -> str:
 
 
 class MediaAsset(Base):
-    """Logical asset (song, image, film, archive)."""
+    """Logical asset scoped to a tenant workspace."""
 
     __tablename__ = "media_assets"
 
     id = Column(String(36), primary_key=True, default=_uuid)
     tenant_slug = Column(String(64), nullable=False, index=True)
     title = Column(String(512), nullable=True)
-    asset_type = Column(String(32), nullable=False, index=True)  # audio, image, video, document, archive
+    asset_type = Column(String(32), nullable=False, index=True)  # audio | image | video | document | archive
     status = Column(String(32), nullable=False, default="inbox", index=True)
-    visibility = Column(String(32), nullable=False, default="private")
+    visibility = Column(String(32), nullable=False, default="private")  # legacy; prefer gallery_stage
     tags = Column(SAJSON, nullable=False, default=dict)
     is_deleted = Column(Boolean, nullable=False, default=False)
-    created_by = Column(String(256), nullable=True)  # Auth0 subject
+    created_by = Column(String(256), nullable=True)
+
+    storage_region = Column(String(32), nullable=False, default="workbench", index=True)
+    gallery_rev = Column(Integer, nullable=True)
+    parent_asset_id = Column(String(36), ForeignKey("media_assets.id"), nullable=True, index=True)
+    gallery_stage = Column(String(32), nullable=True)  # released (gallery only)
+    content_id = Column(String(36), nullable=True, index=True)
+    vision_id = Column(String(36), ForeignKey("visions.id", ondelete="SET NULL"), nullable=True, index=True)
+
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
@@ -38,10 +61,11 @@ class MediaAsset(Base):
         order_by="MediaVersion.version_number.desc()",
     )
     uploads = relationship("MediaUpload", back_populates="asset", cascade="all, delete-orphan")
+    vision = relationship("Vision", back_populates="assets")
 
 
 class MediaVersion(Base):
-    """A stored master rendition (re-upload increments version_number)."""
+    """Stored master rendition (re-upload increments version_number)."""
 
     __tablename__ = "media_versions"
 
@@ -73,7 +97,7 @@ class MediaVersion(Base):
 
 
 class MediaVariant(Base):
-    """Derivative for delivery (web MP3, thumbnail, HLS, published copy)."""
+    """Derivative for delivery (web MP3, display WebP, gallery master copy)."""
 
     __tablename__ = "media_variants"
 
@@ -90,7 +114,7 @@ class MediaVariant(Base):
 
 
 class MediaUpload(Base):
-    """In-flight multipart upload (S3 upload id + our DB id)."""
+    """In-flight multipart upload."""
 
     __tablename__ = "media_uploads"
 
@@ -110,14 +134,15 @@ class MediaUpload(Base):
 
 
 class MediaJob(Base):
-    """Async transcode / probe job (consumed by RQ worker)."""
+    """Async ingest or promote job (RQ worker)."""
 
     __tablename__ = "media_jobs"
 
     id = Column(String(36), primary_key=True, default=_uuid)
     version_id = Column(String(36), ForeignKey("media_versions.id", ondelete="CASCADE"), nullable=False)
-    job_type = Column(String(64), nullable=False, index=True)  # ingest, manual (future)
+    job_type = Column(String(64), nullable=False, index=True)  # ingest | promote
     status = Column(String(32), nullable=False, default="pending", index=True)
+    promote_meta = Column(SAJSON, nullable=True)  # {workbench_asset_id, stage}
     error_message = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())

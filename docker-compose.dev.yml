@@ -11,6 +11,8 @@ services:
     environment:
       - DATABASE_URL=postgresql://postgres:dev_password@db:5432/collective
       - CORS_ORIGINS=http://localhost:3000,http://localhost:3030,http://127.0.0.1:3000,http://127.0.0.1:3030
+      - C0LL3CT1V3_AGENT_KEY=dev-agent-local
+      - MANAGER_LLM_PROVIDER=openrouter
       - DEBUG=true
       - SPACES_ENABLED=true
       - SPACES_ENDPOINT=http://minio:9000
@@ -26,6 +28,8 @@ services:
       - db
       - minio
       - redis
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
   media-worker:
     build:
@@ -87,9 +91,11 @@ services:
     volumes:
       - ./frontend/src:/app/src   # Hot reload
       - ./frontend/public:/app/public
+      - ./frontend/.env:/app/.env # CRA reads .env at npm start — recreate container after edits
+      - ./frontend/package.json:/app/package.json
+      - ./frontend/package-lock.json:/app/package-lock.json
       - /app/node_modules         # Prevent overwriting node_modules
-    env_file:
-      - ./frontend/.env
+    # Do not use env_file here: values are frozen at container create and override /app/.env
     environment:
       - NODE_ENV=development
       - REACT_APP_API_URL=http://localhost:8080  # Dev API URL
@@ -97,7 +103,7 @@ services:
       - WDS_SOCKET_HOST=localhost
       - WDS_SOCKET_PORT=3030
       
-    command: npm start
+    command: sh -c "npm ci && npm start"
 
   
 

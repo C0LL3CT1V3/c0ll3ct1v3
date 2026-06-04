@@ -455,6 +455,16 @@ AWS uses **Security Groups** instead of traditional firewalls. You should have a
 
 **Note**: If you stop an instance without an Elastic IP, you'll get a new public IP when you start it again.
 
+## Public EPK routing (Phase 3)
+
+| URL pattern | Serves |
+|-------------|--------|
+| `https://{artist}.c0ll3ct1v3.xyz` | React EPK (`booker_v1` via `GET /epk/public/{slug}`) |
+| `https://c0ll3ct1v3.xyz/a/{artist}` | Same EPK on apex (path-based) |
+| `https://{artist}.c0ll3ct1v3.xyz` portal | Auth0 artist portal (`/portal`) |
+
+Nginx should route `*.c0ll3ct1v3.xyz` to the frontend SPA; apex `/a/*` is handled client-side by React Router. API: `GET /epk/public/{tenant_slug}` (no auth). Slot updates: `PATCH /artists/me/epk-public` (Auth0).
+
 ## Support
 
 For issues or questions:

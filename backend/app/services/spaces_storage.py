@@ -163,6 +163,21 @@ def presigned_get_object(client: BaseClient, key: str) -> str:
     return url
 
 
+def presigned_put_object(client: BaseClient, key: str, content_type: str = "image/png") -> str:
+    signer = _presign_client(client)
+    url = signer.generate_presigned_url(
+        ClientMethod="put_object",
+        Params={
+            "Bucket": settings.spaces_bucket,
+            "Key": key,
+            "ContentType": content_type,
+        },
+        ExpiresIn=settings.media_presigned_upload_expires_seconds,
+        HttpMethod="PUT",
+    )
+    return _client_facing_url(url)
+
+
 def head_object_bytes(client: BaseClient, key: str) -> int | None:
     try:
         r = client.head_object(Bucket=settings.spaces_bucket, Key=key)

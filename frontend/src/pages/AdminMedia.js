@@ -83,19 +83,6 @@ function AdminMedia() {
     }
   };
 
-  const publishAsset = async () => {
-    if (!selectedId) return;
-    try {
-      await apiClient.post(`/media/assets/${selectedId}/publish`);
-      await loadAssets();
-      const res = await apiClient.get(`/media/assets/${selectedId}`);
-      setSelected(res.data);
-      setError('');
-    } catch (err) {
-      setError(err?.response?.data?.detail || 'Publish failed.');
-    }
-  };
-
   const deleteAsset = async () => {
     if (!selectedId || !window.confirm('Remove this asset from the library?')) return;
     try {
@@ -154,8 +141,6 @@ function AdminMedia() {
                     onClick={() => setSelectedId(a.id)}
                   >
                     <span className="media-asset-title">{a.title || a.id}</span>
-                    <span className={`media-status media-status--${a.status}`}>{a.status}</span>
-                    <span className="media-type">{a.asset_type}</span>
                   </button>
                 </li>
               ))}
@@ -166,7 +151,7 @@ function AdminMedia() {
         <section className="admin-media-detail">
           <h2>Details</h2>
           {!selected ? (
-            <p>Select an asset to edit metadata or publish.</p>
+            <p>Select an asset to edit metadata.</p>
           ) : (
             <>
               <p>
@@ -190,9 +175,6 @@ function AdminMedia() {
               <div className="admin-media-actions">
                 <button type="button" className="retro-btn" onClick={saveMetadata}>
                   Save
-                </button>
-                <button type="button" className="retro-btn" onClick={publishAsset}>
-                  Publish to EPK
                 </button>
                 <button type="button" className="retro-btn retro-btn--danger" onClick={deleteAsset}>
                   Delete

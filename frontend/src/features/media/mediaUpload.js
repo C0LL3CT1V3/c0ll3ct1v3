@@ -95,7 +95,7 @@ export async function uploadFileToSpaces(apiClient, file, assetType, tenantSlug)
   return completeRes.data;
 }
 
-function mimeFromExtension(filename) {
+export function mimeFromExtension(filename) {
   const name = (filename || '').toLowerCase();
   const dot = name.lastIndexOf('.');
   const ext = dot >= 0 ? name.slice(dot) : '';

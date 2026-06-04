@@ -36,7 +36,7 @@ function PortalLayout({ profile, children }) {
           </button>
         </div>
       </header>
-      <main className="portal-main">{children}</main>
+      <main className="portal-main portal-main--studio">{children}</main>
     </div>
   );
 }

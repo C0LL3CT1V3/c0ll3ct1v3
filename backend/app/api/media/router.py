@@ -13,22 +13,32 @@ from ..auth import get_current_user
 from ...config import settings
 from ...database import get_db
 from ...models.media import MediaAsset, MediaJob, MediaUpload, MediaVariant, MediaVersion
+from ...models.vision import Vision
 from ...models.user import User
 from ...services.artist_service import tenant_slug_for_user
-from ...services.epk_media_resolve import best_image_variant, url_for_variant
+from ...services.media_variants import best_image_variant, url_for_variant
 from ...schemas.media_schemas import (
     AssetDetail,
     AssetListItem,
     AssetUpdateBody,
+    ChooserDropboxImportBody,
+    ChooserDropboxImportOut,
+    ChooserGoogleImportBody,
+    ChooserGoogleImportOut,
+    ChooserImportResultItem,
     UploadCompleteBody,
     UploadCompleteResponse,
     UploadInitBody,
     UploadInitResponse,
     VariantOut,
     VersionOut,
-    PublishResponse,
 )
+from ...services.chooser_dropbox_import import download_dropbox_chooser_link
+from ...services.chooser_google_import import download_google_picker_file
+from ...services.cloud_import_media import import_bytes_to_workbench
 from ...services.media_queue import enqueue_media_ingest_job
+from ...schemas.vision_schemas import VisionCreateBody, VisionOut, VisionUpdateBody, WorkbenchOut
+from ...services.storage_paths import workbench_master_key, is_public_delivery_key
 from ...services.media_type import infer_asset_type, infer_mime_type
 from ...services.spaces_storage import (
     abort_multipart_upload,
@@ -38,7 +48,6 @@ from ...services.spaces_storage import (
     head_object_bytes,
     presigned_get_object,
     presigned_upload_part,
-    copy_object_to_key,
     public_url_for_key,
 )
 from ...worker_tasks import ingest_version_inline
@@ -64,15 +73,19 @@ def _assert_asset_in_user_workspace(asset: MediaAsset, db: Session, user: User) 
 
 
 def _tenant_slug(body: UploadInitBody, db: Session, current_user: User) -> str:
+    return _resolve_tenant_slug(body.tenant_slug, db, current_user)
+
+
+def _resolve_tenant_slug(requested: str | None, db: Session, current_user: User) -> str:
     allowed = tenant_slug_for_user(db, current_user)
-    if body.tenant_slug:
-        requested = body.tenant_slug.strip().lower()
-        if requested != allowed:
+    if requested:
+        slug = requested.strip().lower()
+        if slug != allowed:
             raise HTTPException(
                 status.HTTP_403_FORBIDDEN,
                 detail="Cannot upload to another artist workspace.",
             )
-        return requested
+        return slug
     return allowed
 
 
@@ -128,7 +141,7 @@ def _heal_stuck_processing_assets(db: Session, tenant_slug: str) -> None:
 
 def _variant_to_out(v: MediaVariant) -> VariantOut:
     url = None
-    if "/public/" in v.storage_key:
+    if is_public_delivery_key(v.storage_key):
         url = public_url_for_key(v.storage_key)
     return VariantOut(
         id=v.id,
@@ -189,6 +202,7 @@ def init_upload(
         asset_type=resolved_type,
         status="inbox",
         visibility="private",
+        storage_region="workbench",
         tags={},
         created_by=current_user.auth0_sub or str(current_user.id),
     )
@@ -208,7 +222,7 @@ def init_upload(
     db.add(upload_row)
     db.flush()
 
-    storage_key = f"tenants/{tenant}/masters/{asset.id}/v{version_number}/{safe_stem}{suffix}"
+    storage_key = workbench_master_key(tenant, asset.id, version_number, f"{safe_stem}{suffix}")
     try:
         s3_upload_id = create_multipart_upload(client, storage_key, resolved_mime)
     except Exception as exc:  # noqa: BLE001
@@ -336,6 +350,95 @@ def complete_upload(
     return UploadCompleteResponse(asset_id=asset.id, version_id=ver.id, storage_key=key)
 
 
+@router.post("/chooser/dropbox/import", response_model=ChooserDropboxImportOut)
+async def dropbox_chooser_import(
+    body: ChooserDropboxImportBody,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> ChooserDropboxImportOut:
+    """Import files selected via Dropbox Chooser (server downloads direct links)."""
+    _require_storage()
+    tenant = _resolve_tenant_slug(body.tenant_slug, db, current_user)
+    created_by = current_user.auth0_sub or str(current_user.id)
+    imported: list[ChooserImportResultItem] = []
+
+    for item in body.items:
+        data = await download_dropbox_chooser_link(item.link, expected_bytes=item.bytes)
+        mime = infer_mime_type(item.name, "application/octet-stream")
+        asset = import_bytes_to_workbench(
+            db,
+            tenant_slug=tenant,
+            created_by=created_by,
+            filename=item.name,
+            mime_type=mime,
+            data=data,
+        )
+        imported.append(ChooserImportResultItem(asset_id=asset.id, title=asset.title))
+
+    return ChooserDropboxImportOut(imported=imported)
+
+
+@router.post("/chooser/google/import", response_model=ChooserGoogleImportOut)
+async def google_picker_import(
+    body: ChooserGoogleImportBody,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> ChooserGoogleImportOut:
+    """Import files selected via Google Picker (server downloads with user's GIS token)."""
+    _require_storage()
+    tenant = _resolve_tenant_slug(body.tenant_slug, db, current_user)
+    created_by = current_user.auth0_sub or str(current_user.id)
+    imported: list[ChooserImportResultItem] = []
+
+    for item in body.items:
+        name, mime, data = await download_google_picker_file(
+            body.access_token,
+            file_id=item.id,
+            name=item.name,
+            mime_type=item.mime_type,
+        )
+        resolved_mime = infer_mime_type(name, mime)
+        asset = import_bytes_to_workbench(
+            db,
+            tenant_slug=tenant,
+            created_by=created_by,
+            filename=name,
+            mime_type=resolved_mime,
+            data=data,
+        )
+        imported.append(ChooserImportResultItem(asset_id=asset.id, title=asset.title))
+
+    return ChooserGoogleImportOut(imported=imported)
+
+
+@router.get("/workbench", response_model=WorkbenchOut)
+def get_workbench(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> WorkbenchOut:
+    """Workbench assets and vision groups for the portal."""
+    workspace = tenant_slug_for_user(db, current_user)
+    _heal_stuck_processing_assets(db, workspace)
+    visions = (
+        db.query(Vision)
+        .filter(Vision.tenant_slug == workspace)
+        .order_by(Vision.sort_order.asc(), Vision.created_at.asc())
+        .all()
+    )
+    assets = (
+        db.query(MediaAsset)
+        .filter(
+            MediaAsset.is_deleted.is_(False),
+            MediaAsset.tenant_slug == workspace,
+            MediaAsset.storage_region == "workbench",
+        )
+        .order_by(MediaAsset.created_at.desc())
+        .limit(500)
+        .all()
+    )
+    return WorkbenchOut(visions=visions, assets=assets)
+
+
 @router.get("/assets", response_model=list[AssetListItem])
 def list_assets(
     db: Session = Depends(get_db),
@@ -345,7 +448,11 @@ def list_assets(
 ) -> list[AssetListItem]:
     workspace = tenant_slug_for_user(db, current_user)
     _heal_stuck_processing_assets(db, workspace)
-    q = db.query(MediaAsset).filter(MediaAsset.is_deleted.is_(False), MediaAsset.tenant_slug == workspace)
+    q = db.query(MediaAsset).filter(
+        MediaAsset.is_deleted.is_(False),
+        MediaAsset.tenant_slug == workspace,
+        MediaAsset.storage_region == "workbench",
+    )
     if status_filter:
         q = q.filter(MediaAsset.status == status_filter)
     if asset_type:
@@ -377,6 +484,12 @@ def get_asset(
         asset_type=row.asset_type,
         status=row.status,
         visibility=row.visibility,
+        storage_region=row.storage_region or "workbench",
+        gallery_stage=row.gallery_stage,
+        gallery_rev=row.gallery_rev,
+        parent_asset_id=row.parent_asset_id,
+        content_id=row.content_id,
+        vision_id=row.vision_id,
         tags=row.tags or {},
         created_at=row.created_at,
         versions=[_version_to_out(v) for v in row.versions],
@@ -399,9 +512,22 @@ def update_asset(
     if body.tags is not None:
         row.tags = body.tags
     if body.status is not None:
-        if body.status not in {"inbox", "processing", "ready", "published", "archived"}:
+        if body.status not in {"inbox", "processing", "ready", "archived"}:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Invalid status.")
         row.status = body.status
+    patch_fields = body.model_dump(exclude_unset=True)
+    if "vision_id" in patch_fields:
+        if body.vision_id is None:
+            row.vision_id = None
+        else:
+            vision = (
+                db.query(Vision)
+                .filter(Vision.id == body.vision_id, Vision.tenant_slug == row.tenant_slug)
+                .first()
+            )
+            if not vision:
+                raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Vision not found.")
+            row.vision_id = body.vision_id
     db.commit()
     db.refresh(row)
     return get_asset(asset_id, db, current_user)
@@ -426,71 +552,79 @@ def delete_asset(
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
-@router.post("/assets/{asset_id}/publish", response_model=PublishResponse)
-def publish_asset(
-    asset_id: str,
+@router.get("/visions", response_model=list[VisionOut])
+def list_visions(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-) -> PublishResponse:
-    """Copy current master variant to `public/` and mark asset published."""
-    client = _storage_client()
-    asset = (
-        db.query(MediaAsset)
-        .options(joinedload(MediaAsset.versions).joinedload(MediaVersion.variants))
-        .filter(MediaAsset.id == asset_id, MediaAsset.is_deleted.is_(False))
+) -> list[VisionOut]:
+    workspace = tenant_slug_for_user(db, current_user)
+    return (
+        db.query(Vision)
+        .filter(Vision.tenant_slug == workspace)
+        .order_by(Vision.sort_order.asc(), Vision.created_at.asc())
+        .all()
+    )
+
+
+@router.post("/visions", response_model=VisionOut, status_code=status.HTTP_201_CREATED)
+def create_vision(
+    body: VisionCreateBody,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> VisionOut:
+    workspace = tenant_slug_for_user(db, current_user)
+    max_order = (
+        db.query(Vision.sort_order)
+        .filter(Vision.tenant_slug == workspace)
+        .order_by(Vision.sort_order.desc())
         .first()
     )
-    if not asset:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Asset not found")
-    _assert_asset_in_user_workspace(asset, db, current_user)
-    ver = next((v for v in asset.versions if v.is_current), None)
-    if not ver:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="No current version to publish.")
-
-    tenant = asset.tenant_slug
-    ext = Path(ver.storage_key).suffix or ".bin"
-    dest_key = f"tenants/{tenant}/public/{asset.id}/published{ext}"
-    try:
-        copy_object_to_key(client, ver.storage_key, dest_key, content_type=ver.mime_type)
-    except Exception as exc:  # noqa: BLE001
-        raise HTTPException(status.HTTP_502_BAD_GATEWAY, detail=f"Publish copy failed: {exc}") from exc
-
-    actual = head_object_bytes(client, dest_key) or ver.byte_size
-    existing = (
-        db.query(MediaVariant)
-        .filter(MediaVariant.version_id == ver.id, MediaVariant.variant_kind == "published_delivery")
-        .first()
-    )
-    if existing:
-        existing.storage_key = dest_key
-        existing.mime_type = ver.mime_type
-        existing.byte_size = actual
-        existing.ready = True
-    else:
-        db.add(
-            MediaVariant(
-                version_id=ver.id,
-                variant_kind="published_delivery",
-                storage_key=dest_key,
-                mime_type=ver.mime_type,
-                byte_size=actual,
-                ready=True,
-            )
-        )
-    asset.status = "published"
-    asset.visibility = "public"
+    next_order = (max_order[0] + 1) if max_order and max_order[0] is not None else 0
+    row = Vision(tenant_slug=workspace, title=body.title.strip(), sort_order=next_order)
+    db.add(row)
     db.commit()
-    refreshed = (
-        db.query(MediaAsset)
-        .options(joinedload(MediaAsset.versions).joinedload(MediaVersion.variants))
-        .filter(MediaAsset.id == asset_id)
-        .first()
-    )
-    ver = next((v for v in (refreshed.versions if refreshed else []) if v.is_current), None)
-    pub_variants = [
-        _variant_to_out(v) for v in (ver.variants if ver else []) if v.ready and "/public/" in v.storage_key
-    ]
-    return PublishResponse(asset_id=asset.id, public_variants=pub_variants)
+    db.refresh(row)
+    return row
+
+
+@router.patch("/visions/{vision_id}", response_model=VisionOut)
+def update_vision(
+    vision_id: str,
+    body: VisionUpdateBody,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> VisionOut:
+    workspace = tenant_slug_for_user(db, current_user)
+    row = db.query(Vision).filter(Vision.id == vision_id, Vision.tenant_slug == workspace).first()
+    if not row:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Vision not found.")
+    if body.title is not None:
+        row.title = body.title.strip()
+    if body.sort_order is not None:
+        row.sort_order = body.sort_order
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+@router.delete(
+    "/visions/{vision_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    response_class=Response,
+)
+def delete_vision(
+    vision_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> Response:
+    workspace = tenant_slug_for_user(db, current_user)
+    row = db.query(Vision).filter(Vision.id == vision_id, Vision.tenant_slug == workspace).first()
+    if not row:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Vision not found.")
+    db.query(MediaAsset).filter(MediaAsset.vision_id == vision_id).update({"vision_id": None})
+    db.delete(row)
+    db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get("/assets/{asset_id}/preview-url")
@@ -512,6 +646,14 @@ def preview_url(
     ver = next((v for v in row.versions if v.is_current), None)
     if not ver:
         return {"url": None}
+    if row.storage_region == "gallery" and row.gallery_stage == "released":
+        if row.asset_type == "image":
+            best = best_image_variant(ver)
+            if best:
+                return {"url": url_for_variant(best)}
+        for v in ver.variants:
+            if v.ready and is_public_delivery_key(v.storage_key):
+                return {"url": url_for_variant(v)}
     if row.asset_type == "image":
         best = best_image_variant(ver)
         if best:

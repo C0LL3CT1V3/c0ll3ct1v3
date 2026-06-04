@@ -10,11 +10,15 @@ export function useArtistProfile() {
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await apiClient.get('/artists/me');
+      const res = await apiClient.get('/artists/me', { timeout: 15000 });
       setProfile(res.data);
       setError('');
     } catch (err) {
-      setError(err?.response?.data?.detail || 'Failed to load artist profile.');
+      const detail = err?.response?.data?.detail;
+      const timedOut = err?.code === 'ECONNABORTED';
+      setError(
+        detail || (timedOut ? 'Loading your studio timed out. Try refreshing the page.' : 'Failed to load artist profile.'),
+      );
       setProfile(null);
     } finally {
       setLoading(false);

@@ -1,37 +1,26 @@
 import React from 'react';
 import EpkMediaEmbed from '../EpkMediaEmbed';
-
-function blockPhotos(layout, photoById) {
-  const ids = [];
-  layout.forEach((b) => {
-    if (b.type === 'photo_grid' && b.asset_ids) ids.push(...b.asset_ids);
-  });
-  return ids.map((id) => photoById[id]).filter(Boolean);
-}
-
-function blockTracks(layout, trackById) {
-  const ids = [];
-  layout.forEach((b) => {
-    if (b.type === 'music' && b.asset_ids) ids.push(...b.asset_ids);
-  });
-  return ids.map((id) => trackById[id]).filter(Boolean);
-}
+import { blockById, blockByType, collectAssetIds } from '../layoutUtils';
 
 function EditorialTemplate({ site, layout, trackById, photoById, theme }) {
-  const hero = layout.find((b) => b.type === 'hero') || {};
-  const photos = blockPhotos(layout, photoById);
-  const tracks = blockTracks(layout, trackById);
-  const bioBlock = layout.find((b) => b.type === 'bio');
-  const contact = layout.find((b) => b.type === 'contact');
+  const hero = blockById(layout, 'hero', 'hero');
+  const bioBlock = blockById(layout, 'bio-main', 'bio');
+  const contact = blockById(layout, 'contact-1', 'contact');
+  const photoIds = collectAssetIds(layout, 'photo_grid');
+  const musicIds = collectAssetIds(layout, 'music');
+  const photos = photoIds.map((id) => photoById[id]).filter(Boolean);
+  const tracks = musicIds.map((id) => trackById[id]).filter(Boolean);
 
   return (
     <div className="epk-tpl-editorial" style={{ background: theme.background }}>
-      <header className="epk-tpl-hero">
+      <header className="epk-tpl-hero" data-epk-id="hero">
         <h1>{hero.headline || site.display_name}</h1>
-        {(hero.subhead || site.tagline) && <p className="epk-tpl-tagline">{hero.subhead || site.tagline}</p>}
+        {(hero.subhead || site.tagline) && (
+          <p className="epk-tpl-tagline">{hero.subhead || site.tagline}</p>
+        )}
       </header>
       {tracks.length > 0 ? (
-        <section className="epk-section">
+        <section className="epk-section" data-epk-id="music-1">
           <h2>Music</h2>
           <ul className="epk-tracks">
             {tracks.map((t) => (
@@ -45,14 +34,14 @@ function EditorialTemplate({ site, layout, trackById, photoById, theme }) {
           </ul>
         </section>
       ) : null}
-      {(bioBlock?.body || site.bio) ? (
-        <section className="epk-section">
+      {(bioBlock.body || site.bio) ? (
+        <section className="epk-section" data-epk-id="bio-main">
           <h2>About</h2>
-          <p className="epk-bio">{bioBlock?.body || site.bio}</p>
+          <p className="epk-bio">{bioBlock.body || site.bio}</p>
         </section>
       ) : null}
       {photos.length > 0 ? (
-        <section className="epk-section">
+        <section className="epk-section" data-epk-id="photos-1">
           <h2>Photos</h2>
           <div className="epk-photo-grid">
             {photos.map((p) => (
@@ -63,9 +52,9 @@ function EditorialTemplate({ site, layout, trackById, photoById, theme }) {
           </div>
         </section>
       ) : null}
-      {(contact?.email || site.booking_email) ? (
-        <footer className="epk-tpl-contact">
-          <a href={`mailto:${contact?.email || site.booking_email}`}>Book {site.display_name}</a>
+      {(contact.email || site.booking_email) ? (
+        <footer className="epk-tpl-contact" data-epk-id="contact-1">
+          <a href={`mailto:${contact.email || site.booking_email}`}>Book {site.display_name}</a>
         </footer>
       ) : null}
     </div>

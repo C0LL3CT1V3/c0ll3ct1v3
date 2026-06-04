@@ -88,42 +88,85 @@ def ingest_version_media(db: Session, version_id: str) -> None:
 
         _ffprobe_and_update_version(ver, src_path, db)
 
-        tenant = asset.tenant_slug
-        if ver.mime_type.startswith("audio/"):
-            mp3_path = dest_dir / "out.mp3"
-            cmd = [
-                "ffmpeg",
-                "-y",
-                "-i",
-                src_path,
-                "-codec:a",
-                "libmp3lame",
-                "-b:a",
-                "192k",
-                str(mp3_path),
-            ]
-            subprocess.run(cmd, check=True, capture_output=True)
-            variant_key = f"tenants/{tenant}/public/{asset.id}/{ver.id}_web.mp3"
-            client.upload_file(
-                str(mp3_path),
-                settings.spaces_bucket,
-                variant_key,
-                ExtraArgs={"ContentType": "audio/mpeg"},
-            )
-            _upsert_variant(
-                db,
-                ver,
-                variant_kind="web_mp3",
-                storage_key=variant_key,
-                mime_type="audio/mpeg",
-                byte_size=os.path.getsize(mp3_path),
-            )
-        elif ver.mime_type.startswith("image/"):
-            _ingest_image_variants(db, client, asset, ver, src_path, dest_dir, tenant)
+        # Derivatives are generated on gallery promotion only (not in workbench).
+        if (asset.storage_region or "workbench") == "gallery":
+            tenant = asset.tenant_slug
+            content_id = asset.content_id or asset.id
+            rev = asset.gallery_rev or 1
+            from .services.storage_paths import gallery_derived_key
+
+            if ver.mime_type.startswith("audio/"):
+                mp3_path = dest_dir / "out.mp3"
+                subprocess.run(
+                    [
+                        "ffmpeg",
+                        "-y",
+                        "-i",
+                        src_path,
+                        "-codec:a",
+                        "libmp3lame",
+                        "-b:a",
+                        "192k",
+                        str(mp3_path),
+                    ],
+                    check=True,
+                    capture_output=True,
+                )
+                variant_key = gallery_derived_key(tenant, content_id, rev, "web_mp3", "stream.mp3")
+                client.upload_file(
+                    str(mp3_path),
+                    settings.spaces_bucket,
+                    variant_key,
+                    ExtraArgs={"ContentType": "audio/mpeg"},
+                )
+                _upsert_variant(
+                    db,
+                    ver,
+                    variant_kind="web_mp3",
+                    storage_key=variant_key,
+                    mime_type="audio/mpeg",
+                    byte_size=os.path.getsize(mp3_path),
+                )
+            elif ver.mime_type.startswith("image/"):
+                _ingest_image_variants(db, client, asset, ver, src_path, dest_dir, tenant, content_id, rev)
 
     if asset.status == "processing":
         asset.status = "ready"
     db.commit()
+
+
+def run_promote_job(job_id: str) -> None:
+    """RQ handler: promote workbench asset to gallery."""
+    from .services.media_promote import promote_workbench_asset
+
+    db: Session = SessionLocal()
+    try:
+        row = db.query(MediaJob).filter(MediaJob.id == job_id).first()
+        if not row or row.job_type != "promote":
+            log.warning("promote job %s not found", job_id)
+            return
+        if row.status == "succeeded":
+            return
+        row.status = "running"
+        db.commit()
+        meta = row.promote_meta or {}
+        wb_id = meta.get("workbench_asset_id") or meta.get("workbench_id")
+        try:
+            promote_workbench_asset(db, workbench_asset_id=wb_id)
+            row = db.query(MediaJob).filter(MediaJob.id == job_id).first()
+            if row:
+                row.status = "succeeded"
+                db.commit()
+        except Exception:
+            db.rollback()
+            row = db.query(MediaJob).filter(MediaJob.id == job_id).first()
+            if row:
+                row.status = "failed"
+                row.error_message = "promote failed; see logs"
+                db.commit()
+            raise
+    finally:
+        db.close()
 
 
 def _ingest_image_variants(
@@ -134,6 +177,8 @@ def _ingest_image_variants(
     src_path: str,
     dest_dir: Path,
     tenant: str,
+    content_id: str,
+    rev: int,
 ) -> None:
     """Create a display variant; fall back to copying the master if ffmpeg fails."""
     web_path = dest_dir / "display.webp"
@@ -164,7 +209,9 @@ def _ingest_image_variants(
     if not web_path.is_file():
         raise RuntimeError("Could not produce image display variant")
 
-    variant_key = f"tenants/{tenant}/public/{asset.id}/{ver.id}_display{web_path.suffix}"
+    from .services.storage_paths import gallery_derived_key
+
+    variant_key = gallery_derived_key(tenant, content_id, rev, "display", web_path.name)
     client.upload_file(
         str(web_path),
         settings.spaces_bucket,

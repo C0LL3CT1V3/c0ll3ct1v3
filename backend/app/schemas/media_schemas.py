@@ -46,10 +46,47 @@ class UploadCompleteResponse(BaseModel):
     storage_key: str
 
 
+class ChooserDropboxItem(BaseModel):
+    name: str = Field(..., min_length=1, max_length=512)
+    link: str = Field(..., min_length=8, max_length=4096)
+    bytes: int | None = Field(None, ge=0)
+
+
+class ChooserDropboxImportBody(BaseModel):
+    items: list[ChooserDropboxItem] = Field(..., min_length=1, max_length=25)
+    tenant_slug: str | None = Field(None, max_length=64)
+
+
+class ChooserImportResultItem(BaseModel):
+    asset_id: str
+    title: str | None
+
+
+class ChooserDropboxImportOut(BaseModel):
+    imported: list[ChooserImportResultItem]
+
+
+class ChooserGoogleItem(BaseModel):
+    id: str = Field(..., min_length=1, max_length=128)
+    name: str = Field(..., min_length=1, max_length=512)
+    mime_type: str | None = Field(None, max_length=256)
+
+
+class ChooserGoogleImportBody(BaseModel):
+    access_token: str = Field(..., min_length=10, max_length=4096)
+    items: list[ChooserGoogleItem] = Field(..., min_length=1, max_length=25)
+    tenant_slug: str | None = Field(None, max_length=64)
+
+
+class ChooserGoogleImportOut(BaseModel):
+    imported: list[ChooserImportResultItem]
+
+
 class AssetUpdateBody(BaseModel):
     title: str | None = None
     tags: dict[str, Any] | None = None
     status: str | None = None
+    vision_id: str | None = None  # set null to ungroup
 
 
 class VariantOut(BaseModel):
@@ -88,6 +125,12 @@ class AssetListItem(BaseModel):
     asset_type: str
     status: str
     visibility: str
+    storage_region: str = "workbench"
+    gallery_stage: str | None = None
+    gallery_rev: int | None = None
+    parent_asset_id: str | None = None
+    content_id: str | None = None
+    vision_id: str | None = None
     created_at: Any
     tags: dict[str, Any]
 
@@ -101,6 +144,12 @@ class AssetDetail(BaseModel):
     asset_type: str
     status: str
     visibility: str
+    storage_region: str = "workbench"
+    gallery_stage: str | None = None
+    gallery_rev: int | None = None
+    parent_asset_id: str | None = None
+    content_id: str | None = None
+    vision_id: str | None = None
     tags: dict[str, Any]
     created_at: Any
     versions: list[VersionOut] = []
@@ -108,21 +157,3 @@ class AssetDetail(BaseModel):
     model_config = {"from_attributes": True}
 
 
-class PublishedTrackOut(BaseModel):
-    asset_id: str
-    title: str | None
-    duration_ms: int | None
-    stream_url: str
-    mime_type: str
-
-
-class PublishedPhotoOut(BaseModel):
-    asset_id: str
-    title: str | None
-    url: str
-    mime_type: str
-
-
-class PublishResponse(BaseModel):
-    asset_id: str
-    public_variants: list[VariantOut]

@@ -77,6 +77,74 @@
   line-height: 1.65;
 }
 
+/* Phase 3 — booker_v1 */
+.booker-epk-hero {
+  margin-bottom: 2rem;
+}
+
+.booker-epk-video-wrap {
+  position: relative;
+  width: 100%;
+  padding-bottom: 56.25%;
+  background: #111;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.booker-epk-video-wrap iframe {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+
+.booker-epk-photos .epk-photo img {
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+}
+
+.booker-epk-email {
+  font-family: system-ui, sans-serif;
+  font-size: 1.1rem;
+}
+
+.epk-public-editor {
+  max-width: 520px;
+}
+
+.epk-editor-label {
+  display: block;
+  margin-top: 1rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  font-family: system-ui, sans-serif;
+}
+
+.epk-editor-input {
+  width: 100%;
+  margin-top: 0.35rem;
+  padding: 0.5rem 0.65rem;
+  font-family: system-ui, sans-serif;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+}
+
+.epk-photo-picker {
+  list-style: none;
+  padding: 0;
+  margin: 0.5rem 0 1rem;
+  font-family: system-ui, sans-serif;
+  font-size: 0.9rem;
+}
+
+.portal-success {
+  color: #1a5c1a;
+  font-family: system-ui, sans-serif;
+  font-size: 0.9rem;
+}
+
 .epk-footer {
   text-align: center;
   padding: 2rem;

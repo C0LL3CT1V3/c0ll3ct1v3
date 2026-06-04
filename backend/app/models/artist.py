@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlalchemy import Column, DateTime, Integer, String, Text
+from sqlalchemy import Boolean, Column, DateTime, Integer, String, Text
 from sqlalchemy import JSON as SAJSON
 from sqlalchemy.sql import func
 
@@ -27,6 +27,8 @@ class Artist(Base):
     tenant_slug = Column(String, unique=True, nullable=False, index=True)
     display_name = Column(String, nullable=False)
     epk_config = Column(SAJSON, nullable=False, default=default_epk_config)
+    epk_draft = Column(SAJSON, nullable=True)
     manager_system_prompt = Column(Text, nullable=True)
+    allow_training_contribution = Column(Boolean, nullable=False, default=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())

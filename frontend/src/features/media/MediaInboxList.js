@@ -48,7 +48,7 @@ function MediaInboxList({ apiClient, authReady = true, refreshKey, onSelect, sel
     e.stopPropagation();
     const asset = assets.find((x) => x.id === id);
     if (asset && asset.status === 'processing') {
-      setError('Wait until processing finishes before publishing.');
+      setError('Wait until processing finishes before promoting.');
       return;
     }
     if (asset && asset.status === 'inbox') {
@@ -56,20 +56,20 @@ function MediaInboxList({ apiClient, authReady = true, refreshKey, onSelect, sel
       return;
     }
     try {
-      await apiClient.post(`/media/assets/${id}/publish`);
+      await apiClient.post(`/media/assets/${id}/promote`, {});
       await loadAssets();
       setError('');
     } catch (err) {
-      setError(err?.response?.data?.detail || 'Publish failed.');
+      setError(err?.response?.data?.detail || 'Promote failed.');
     }
   };
 
-  const canPublish = (status) => status === 'ready' || status === 'published';
+  const canPromote = (status) => status === 'ready';
 
   return (
     <div className="media-inbox">
       <h3>Library</h3>
-      <p className="media-inbox-hint">Publish moves media to your public EPK.</p>
+      <p className="media-inbox-hint">Promote copies workbench masters into gallery delivery.</p>
       {error ? <div className="error-message">{error}</div> : null}
       {assets.length === 0 ? (
         <p className="media-inbox-empty">No uploads yet.</p>
@@ -80,7 +80,9 @@ function MediaInboxList({ apiClient, authReady = true, refreshKey, onSelect, sel
               {thumbs[a.id] ? (
                 <img src={thumbs[a.id]} alt="" className="media-thumb" />
               ) : (
-                <span className="media-thumb media-thumb--placeholder">{a.asset_type[0]}</span>
+                <span className="media-thumb media-thumb--placeholder" aria-hidden>
+                  ·
+                </span>
               )}
               <button
                 type="button"
@@ -90,12 +92,10 @@ function MediaInboxList({ apiClient, authReady = true, refreshKey, onSelect, sel
                 onClick={() => onSelect?.(a.id)}
               >
                 <span className="media-asset-title">{a.title || a.id}</span>
-                <span className="media-type">{a.asset_type}</span>
-                <span className={`media-status media-status--${a.status}`}>{a.status}</span>
               </button>
-              {canPublish(a.status) && a.status !== 'published' ? (
+              {canPromote(a.status) ? (
                 <button type="button" className="portal-btn portal-btn--small" onClick={(e) => publish(a.id, e)}>
-                  Publish
+                  Promote
                 </button>
               ) : null}
               {a.status === 'processing' ? (

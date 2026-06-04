@@ -5,14 +5,12 @@ from sqlalchemy import inspect, text
 from .api.accounts import router as accounts_router
 from .api.auth import router as auth_router
 from .api.artists.router import router as artists_router
-from .api.epk.router import router as epk_router
-from .api.epk.design_router import router as epk_design_router
 from .api.manager.router import router as manager_router
 from .api.media.router import router as media_router
 from .api.music.router import router as music_router
 from .config import settings
 from .database import Base, engine
-from .models import account, artist, document, ledger, media, user, wallet
+from .models import account, artist, cloud_connection, document, ledger, manager, media, user, vision, wallet
 
 from .finance_integrations.router import router as finance_router
 from .finance_integrations.validation import validate_finance_production_config
@@ -35,8 +33,6 @@ app.include_router(auth_router)
 app.include_router(media_router)
 app.include_router(artists_router)
 app.include_router(manager_router)
-app.include_router(epk_router)
-app.include_router(epk_design_router)
 app.include_router(music_router)
 if settings.finance_integrations_enabled:
     app.include_router(finance_router)
@@ -46,7 +42,6 @@ Base.metadata.create_all(bind=engine)
 
 def _seed_default_artist() -> None:
     """Ensure the primary tenant has a public EPK profile before first login."""
-    from .config import settings
     from .database import SessionLocal
     from .models.artist import Artist, default_epk_config
 
@@ -74,9 +69,6 @@ def _seed_default_artist() -> None:
         db.commit()
     finally:
         db.close()
-
-
-_seed_default_artist()
 
 
 def _run_schema_migrations() -> None:
@@ -117,8 +109,18 @@ def _run_schema_migrations() -> None:
             )
         connection.execute(text("CREATE INDEX IF NOT EXISTS ix_bank_accounts_user_id ON bank_accounts (user_id)"))
 
+    from .db_media_migrations import run_media_schema_migrations
+
+    run_media_schema_migrations(engine)
+
+    from .db_manager_migrations import run_manager_schema_migrations
+
+    run_manager_schema_migrations(engine)
+
 
 _run_schema_migrations()
+_seed_default_artist()
+
 
 @app.on_event("startup")
 def _validate_finance_production_config() -> None:

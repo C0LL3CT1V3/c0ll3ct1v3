@@ -1,34 +1,38 @@
 import React, { useState } from 'react';
+import {
+  getDropboxDisabledReason,
+  getGoogleDisabledReason,
+  isDropboxChooserEnabled,
+  isGooglePickerEnabled,
+} from './cloudImportConfig';
+import {
+  importDropboxChooserEntries,
+  importGooglePickerEntries,
+  pickDropboxChooserEntries,
+  pickGooglePickerEntries,
+} from './cloudChoosers';
 import { guessAssetType, uploadFileToSpaces } from './mediaUpload';
 
-const ASSET_TYPES = [
-  { value: 'auto', label: 'Auto-detect from file' },
-  { value: 'audio', label: 'Audio' },
-  { value: 'image', label: 'Image' },
-  { value: 'video', label: 'Video' },
-  { value: 'document', label: 'Document' },
-  { value: 'archive', label: 'Archive (ZIP)' },
-];
-
 function MediaDropzone({ apiClient, tenantSlug, onUploaded, onError }) {
-  const [typeOverride, setTypeOverride] = useState('auto');
   const [dragOver, setDragOver] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState('');
 
-  const handleFiles = async (fileList) => {
-    const files = Array.from(fileList || []);
-    if (!files.length) return;
+  const dropboxEnabled = isDropboxChooserEnabled();
+  const googleEnabled = isGooglePickerEnabled();
+  const dropboxDisabledReason = getDropboxDisabledReason();
+  const googleDisabledReason = getGoogleDisabledReason();
+
+  const uploadFiles = async (files) => {
+    const list = Array.from(files || []);
+    if (!list.length) return;
     setUploading(true);
     onError?.('');
     try {
-      for (let i = 0; i < files.length; i += 1) {
-        const file = files[i];
-        const type = typeOverride === 'auto' ? guessAssetType(file) : typeOverride;
-        setUploadProgress(
-          `Uploading ${file.name} as ${type} (${i + 1}/${files.length})…`,
-        );
-        await uploadFileToSpaces(apiClient, file, type, tenantSlug);
+      for (let i = 0; i < list.length; i += 1) {
+        const file = list[i];
+        setUploadProgress(`Uploading ${file.name} (${i + 1}/${list.length})…`);
+        await uploadFileToSpaces(apiClient, file, guessAssetType(file), tenantSlug);
       }
       setUploadProgress('');
       onUploaded?.();
@@ -40,40 +44,67 @@ function MediaDropzone({ apiClient, tenantSlug, onUploaded, onError }) {
     }
   };
 
-  const onDrop = (e) => {
-    e.preventDefault();
-    setDragOver(false);
-    if (!uploading) {
-      handleFiles(e.dataTransfer.files);
+  const handleDropbox = async () => {
+    if (!dropboxEnabled || uploading) return;
+    setUploading(true);
+    onError?.('');
+    try {
+      setUploadProgress('Opening Dropbox…');
+      const entries = await pickDropboxChooserEntries();
+      if (!entries.length) {
+        setUploadProgress('');
+        return;
+      }
+      setUploadProgress(`Importing ${entries.length} file(s) from Dropbox…`);
+      await importDropboxChooserEntries(apiClient, entries, tenantSlug);
+      setUploadProgress('');
+      onUploaded?.();
+    } catch (err) {
+      onError?.(err?.response?.data?.detail || err.message || 'Dropbox import failed.');
+      setUploadProgress('');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleGoogleDrive = async () => {
+    if (!googleEnabled || uploading) return;
+    setUploading(true);
+    onError?.('');
+    try {
+      setUploadProgress('Opening Google Drive…');
+      const { entries, accessToken } = await pickGooglePickerEntries();
+      if (!entries.length) {
+        setUploadProgress('');
+        return;
+      }
+      setUploadProgress(`Importing ${entries.length} file(s) from Google Drive…`);
+      await importGooglePickerEntries(apiClient, entries, accessToken, tenantSlug);
+      setUploadProgress('');
+      onUploaded?.();
+    } catch (err) {
+      onError?.(err?.response?.data?.detail || err.message || 'Google Drive import failed.');
+      setUploadProgress('');
+    } finally {
+      setUploading(false);
     }
   };
 
   return (
-    <div className="media-dropzone-panel">
-      <label htmlFor="portal-asset-type">Upload as</label>
-      <select
-        id="portal-asset-type"
-        value={typeOverride}
-        onChange={(e) => setTypeOverride(e.target.value)}
-        disabled={uploading}
-      >
-        {ASSET_TYPES.map((t) => (
-          <option key={t.value} value={t.value}>
-            {t.label}
-          </option>
-        ))}
-      </select>
-
-      <div
-        className={`media-dropzone${dragOver ? ' media-dropzone--active' : ''}`}
-        onDragOver={(e) => {
-          e.preventDefault();
-          setDragOver(true);
-        }}
-        onDragLeave={() => setDragOver(false)}
-        onDrop={onDrop}
-      >
-        <p>Drop files here or choose — type is detected from extension and MIME type.</p>
+    <div
+      className={`media-dropzone${dragOver ? ' media-dropzone--active' : ''}`}
+      onDragOver={(e) => {
+        e.preventDefault();
+        setDragOver(true);
+      }}
+      onDragLeave={() => setDragOver(false)}
+      onDrop={(e) => {
+        e.preventDefault();
+        setDragOver(false);
+        if (!uploading) uploadFiles(e.dataTransfer.files);
+      }}
+    >
+      <div className="media-upload-actions">
         <label className="portal-btn portal-btn--ghost media-file-label">
           Choose files
           <input
@@ -81,13 +112,38 @@ function MediaDropzone({ apiClient, tenantSlug, onUploaded, onError }) {
             multiple
             disabled={uploading}
             onChange={(e) => {
-              handleFiles(e.target.files);
+              uploadFiles(e.target.files);
               e.target.value = '';
             }}
           />
         </label>
-        {uploadProgress ? <p className="upload-progress">{uploadProgress}</p> : null}
+        <button
+          type="button"
+          className="portal-btn portal-btn--ghost media-cloud-btn"
+          disabled={uploading || !dropboxEnabled}
+          onClick={handleDropbox}
+          title={dropboxEnabled ? 'Import from Dropbox (official Chooser)' : dropboxDisabledReason}
+        >
+          Dropbox
+        </button>
+        <button
+          type="button"
+          className="portal-btn portal-btn--ghost media-cloud-btn"
+          disabled={uploading || !googleEnabled}
+          onClick={handleGoogleDrive}
+          title={googleEnabled ? 'Import from Google Drive (official Picker)' : googleDisabledReason}
+        >
+          Google Drive
+        </button>
       </div>
+      <p className="media-dropzone-hint">or drop files here</p>
+      {!dropboxEnabled && dropboxDisabledReason ? (
+        <p className="media-dropzone-config-hint media-dropzone-config-hint--warn">{dropboxDisabledReason}</p>
+      ) : null}
+      {!googleEnabled && googleDisabledReason ? (
+        <p className="media-dropzone-config-hint media-dropzone-config-hint--warn">{googleDisabledReason}</p>
+      ) : null}
+      {uploadProgress ? <p className="upload-progress">{uploadProgress}</p> : null}
     </div>
   );
 }
