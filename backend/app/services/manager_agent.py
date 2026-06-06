@@ -80,7 +80,8 @@ def _build_messages(
     if mode == "epk_builder":
         system += (
             "\n\nThread mode: epk_builder. You MUST call a tool on every turn. "
-            "Prefer `update_epk_draft` for design/copy changes; use `reply_to_artist` for questions only."
+            "Prefer `build_epk_from_vision` when the artist wants a new EPK from their vision pack; "
+            "use `update_epk_draft` for legacy layout tweaks; use `reply_to_artist` for questions only."
         )
 
     messages: list[dict[str, Any]] = [{"role": "system", "content": system}]

@@ -5,16 +5,34 @@ export function useEpkBuilder() {
   const { apiClient, authReady } = useApiClient();
   const [draft, setDraft] = useState(null);
   const [componentMap, setComponentMap] = useState([]);
+  const [visions, setVisions] = useState([]);
+  const [selectedVisionId, setSelectedVisionId] = useState('');
+  const [spec, setSpec] = useState('');
   const [threadId, setThreadId] = useState(null);
   const [currentIterationId, setCurrentIterationId] = useState(null);
   const [screenshotStorageKey, setScreenshotStorageKey] = useState(null);
   const [reasoningSummary, setReasoningSummary] = useState('');
+  const [critiqueSummary, setCritiqueSummary] = useState('');
+  const [matchScore, setMatchScore] = useState(null);
+  const [revisionCycles, setRevisionCycles] = useState(null);
   const [phase, setPhase] = useState('idle');
   const [error, setError] = useState('');
+
+  const loadVisions = useCallback(async () => {
+    const res = await apiClient.get('/media/visions');
+    setVisions(res.data || []);
+    return res.data || [];
+  }, [apiClient]);
 
   const loadDraft = useCallback(async () => {
     const res = await apiClient.get('/manager/epk/draft');
     setDraft(res.data);
+    if (res.data?.vision_id) {
+      setSelectedVisionId(res.data.vision_id);
+    }
+    if (res.data?.spec_snapshot) {
+      setSpec(res.data.spec_snapshot);
+    }
     const mapRes = await apiClient.get('/manager/epk/component-map');
     setComponentMap(mapRes.data?.components || []);
     return res.data;
@@ -22,10 +40,56 @@ export function useEpkBuilder() {
 
   useEffect(() => {
     if (!authReady) return;
+    loadVisions().catch(() => {});
     loadDraft().catch((err) => {
       setError(err?.response?.data?.detail || 'Failed to load EPK draft.');
     });
-  }, [authReady, loadDraft]);
+  }, [authReady, loadDraft, loadVisions]);
+
+  const applyBuildResult = (data) => {
+    setThreadId(data.thread_id);
+    setCurrentIterationId(data.iteration_id);
+    setScreenshotStorageKey(data.screenshot_storage_key || null);
+    setReasoningSummary(data.reasoning_summary || '');
+    setCritiqueSummary(data.critique_summary || '');
+    setMatchScore(data.match_score ?? null);
+    setRevisionCycles(data.revision_cycles ?? null);
+    setDraft({
+      format: data.format || 'html_v1',
+      html: data.html,
+      css: data.css,
+      asset_bindings: data.asset_bindings,
+      vision_id: data.vision_id,
+      spec_snapshot: data.spec_snapshot,
+      sim_render_url: data.sim_render_url,
+      design: data.design,
+      site: data.site,
+      tracks: data.tracks,
+      photos: data.photos,
+    });
+  };
+
+  const buildFromVision = useCallback(
+    async (visionId, specText) => {
+      setPhase('generating');
+      setError('');
+      try {
+        const res = await apiClient.post('/manager/epk/build-from-vision', {
+          vision_id: visionId,
+          spec: specText,
+          thread_id: threadId,
+        });
+        applyBuildResult(res.data);
+        setPhase('preview');
+        return res.data;
+      } catch (err) {
+        setError(err?.response?.data?.detail || err.message || 'EPK build failed.');
+        setPhase('idle');
+        throw err;
+      }
+    },
+    [apiClient, threadId],
+  );
 
   const captureAndUploadScreenshot = async (rootEl, uploadUrl) => {
     if (!rootEl || !uploadUrl) return;
@@ -59,6 +123,7 @@ export function useEpkBuilder() {
         setScreenshotStorageKey(data.screenshot_storage_key || null);
         setReasoningSummary(data.reasoning_summary || '');
         setDraft({
+          format: 'layout',
           design: data.design,
           site: data.site,
           tracks: data.tracks,
@@ -111,6 +176,7 @@ export function useEpkBuilder() {
         setScreenshotStorageKey(data.screenshot_storage_key || null);
         setReasoningSummary(data.reasoning_summary || '');
         setDraft({
+          format: 'layout',
           design: data.design,
           site: data.site,
           tracks: data.tracks,
@@ -148,16 +214,25 @@ export function useEpkBuilder() {
   return {
     draft,
     componentMap,
+    visions,
+    selectedVisionId,
+    setSelectedVisionId,
+    spec,
+    setSpec,
     threadId,
     setThreadId,
     currentIterationId,
     reasoningSummary,
     setReasoningSummary,
+    critiqueSummary,
+    matchScore,
+    revisionCycles,
     phase,
     setPhase,
     error,
     setError,
     loadDraft,
+    buildFromVision,
     iterate,
     submitAnnotations,
     refine,

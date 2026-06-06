@@ -37,7 +37,14 @@ from ...services.chooser_dropbox_import import download_dropbox_chooser_link
 from ...services.chooser_google_import import download_google_picker_file
 from ...services.cloud_import_media import import_bytes_to_workbench
 from ...services.media_queue import enqueue_media_ingest_job
-from ...schemas.vision_schemas import VisionCreateBody, VisionOut, VisionUpdateBody, WorkbenchOut
+from ...schemas.vision_schemas import (
+    VisionCreateBody,
+    VisionOut,
+    VisionPackOut,
+    VisionUpdateBody,
+    WorkbenchOut,
+)
+from ...services.vision_pack import apply_vision_assignment, get_vision_pack, vision_role_from_tags
 from ...services.storage_paths import workbench_master_key, is_public_delivery_key
 from ...services.media_type import infer_asset_type, infer_mime_type
 from ...services.spaces_storage import (
@@ -516,18 +523,30 @@ def update_asset(
             raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Invalid status.")
         row.status = body.status
     patch_fields = body.model_dump(exclude_unset=True)
-    if "vision_id" in patch_fields:
-        if body.vision_id is None:
-            row.vision_id = None
+    vision_id = row.vision_id if "vision_id" not in patch_fields else body.vision_id
+    vision_role = body.vision_role if "vision_role" in patch_fields else None
+
+    if "vision_id" in patch_fields or "vision_role" in patch_fields:
+        if vision_id is None and vision_role is None and "vision_id" in patch_fields:
+            apply_vision_assignment(db, row, vision_id=None, vision_role=None)
         else:
-            vision = (
-                db.query(Vision)
-                .filter(Vision.id == body.vision_id, Vision.tenant_slug == row.tenant_slug)
-                .first()
+            if vision_id:
+                vision = (
+                    db.query(Vision)
+                    .filter(Vision.id == vision_id, Vision.tenant_slug == row.tenant_slug)
+                    .first()
+                )
+                if not vision:
+                    raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Vision not found.")
+            resolved_role = vision_role
+            if vision_id and resolved_role is None:
+                resolved_role = vision_role_from_tags(row.tags)
+            apply_vision_assignment(
+                db,
+                row,
+                vision_id=vision_id,
+                vision_role=resolved_role,
             )
-            if not vision:
-                raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Vision not found.")
-            row.vision_id = body.vision_id
     db.commit()
     db.refresh(row)
     return get_asset(asset_id, db, current_user)
@@ -605,6 +624,16 @@ def update_vision(
     db.commit()
     db.refresh(row)
     return row
+
+
+@router.get("/visions/{vision_id}/pack", response_model=VisionPackOut)
+def get_vision_pack_route(
+    vision_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> VisionPackOut:
+    workspace = tenant_slug_for_user(db, current_user)
+    return VisionPackOut(**get_vision_pack(db, vision_id, workspace))
 
 
 @router.delete(

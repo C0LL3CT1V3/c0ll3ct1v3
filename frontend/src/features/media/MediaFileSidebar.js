@@ -80,6 +80,9 @@ function MediaFileSidebar({
                       {a.vision_id && visionTitleById[a.vision_id] ? (
                         <span className="portal-file-vision">{visionTitleById[a.vision_id]}</span>
                       ) : null}
+                      {a.tags?.vision_role && a.tags.vision_role !== 'media' ? (
+                        <span className="portal-file-role">{a.tags.vision_role}</span>
+                      ) : null}
                     </div>
                     <button
                       type="button"

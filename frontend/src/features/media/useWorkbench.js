@@ -70,9 +70,16 @@ export function useWorkbench(apiClient, authReady, refreshKey) {
     return { grouped, ungrouped };
   }, [visions, assets]);
 
-  const assignAsset = async (assetId, visionId) => {
-    await apiClient.patch(`/media/assets/${assetId}`, { vision_id: visionId });
+  const assignAssetToVisionRole = async (assetId, visionId, role) => {
+    await apiClient.patch(`/media/assets/${assetId}`, {
+      vision_id: visionId,
+      vision_role: role,
+    });
     await loadWorkbench();
+  };
+
+  const assignAsset = async (assetId, visionId) => {
+    await assignAssetToVisionRole(assetId, visionId, 'media');
   };
 
   const deleteAsset = async (assetId) => {
@@ -107,6 +114,7 @@ export function useWorkbench(apiClient, authReady, refreshKey) {
     visionTitleById,
     assetsByVision,
     assignAsset,
+    assignAssetToVisionRole,
     deleteAsset,
     createVision,
     renameVision,

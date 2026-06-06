@@ -1,6 +1,17 @@
 import React, { useState } from 'react';
 import { getAssetDragId } from './mediaDrag';
 
+function visionRole(asset) {
+  return asset?.tags?.vision_role || 'media';
+}
+
+function partitionVisionAssets(items) {
+  const wireframe = items.find((a) => visionRole(a) === 'wireframe') || null;
+  const references = items.filter((a) => visionRole(a) === 'reference');
+  const media = items.filter((a) => visionRole(a) === 'media');
+  return { wireframe, references, media };
+}
+
 function MediaVisionBoard({
   visions,
   assets,
@@ -10,7 +21,7 @@ function MediaVisionBoard({
   onSelect,
   error,
   onError,
-  assignAsset,
+  assignAssetToVisionRole,
   deleteAsset,
   createVision,
   renameVision,
@@ -28,15 +39,16 @@ function MediaVisionBoard({
     setDragOverZone(null);
   };
 
-  const onDropZone = async (e, visionId) => {
+  const onDropZone = async (e, visionId, role) => {
     e.preventDefault();
     setDragOverZone(null);
     const assetId = getAssetDragId(e.dataTransfer);
     if (!assetId) return;
     const asset = assets.find((a) => a.id === assetId);
-    if (!asset || asset.vision_id === visionId) return;
+    if (!asset) return;
+    if (asset.vision_id === visionId && visionRole(asset) === role) return;
     try {
-      await assignAsset(assetId, visionId);
+      await assignAssetToVisionRole(assetId, visionId, role);
     } catch (err) {
       onError?.(err?.response?.data?.detail || 'Could not move item.');
     }
@@ -75,6 +87,11 @@ function MediaVisionBoard({
     <div
       key={a.id}
       className={`workbench-asset${selectedId === a.id ? ' workbench-asset--selected' : ''}`}
+      draggable
+      onDragStart={(e) => {
+        e.dataTransfer.setData('application/x-c0-media-asset', a.id);
+        e.dataTransfer.effectAllowed = 'move';
+      }}
       onClick={() => onSelect?.(a.id)}
       role="button"
       tabIndex={0}
@@ -90,9 +107,6 @@ function MediaVisionBoard({
         </span>
       )}
       <span className="workbench-asset-title">{a.title || 'Untitled'}</span>
-      {a.status === 'processing' ? (
-        <span className="workbench-asset-meta">Processing…</span>
-      ) : null}
       <button
         type="button"
         className="workbench-asset-delete"
@@ -104,17 +118,30 @@ function MediaVisionBoard({
     </div>
   );
 
-  const renderVisionCluster = (vision) => {
-    const zoneId = `vision-${vision.id}`;
-    const items = assetsByVision.grouped[vision.id] || [];
+  const renderDropSlot = (visionId, role, label, slotAsset, slotKey) => {
+    const zoneId = `${visionId}-${role}-${slotKey}`;
+    const active = dragOverZone === zoneId;
     return (
-      <section
-        key={vision.id}
-        className={`workbench-vision${dragOverZone === zoneId ? ' workbench-vision--drag-over' : ''}`}
+      <div
+        key={zoneId}
+        className={`workbench-vision-slot workbench-vision-slot--${role}${active ? ' workbench-vision-slot--drag-over' : ''}${slotAsset ? ' workbench-vision-slot--filled' : ''}`}
         onDragOver={(e) => onDragOverZone(e, zoneId)}
         onDragLeave={onDragLeaveZone}
-        onDrop={(e) => onDropZone(e, vision.id)}
+        onDrop={(e) => onDropZone(e, visionId, role)}
       >
+        <span className="workbench-vision-slot-label">{label}</span>
+        {slotAsset ? renderAssetCard(slotAsset) : <p className="workbench-vision-slot-empty">Drop here</p>}
+      </div>
+    );
+  };
+
+  const renderVisionCluster = (vision) => {
+    const items = assetsByVision.grouped[vision.id] || [];
+    const { wireframe, references, media } = partitionVisionAssets(items);
+    const refSlots = [0, 1, 2].map((i) => references[i] || null);
+
+    return (
+      <section key={vision.id} className="workbench-vision">
         <header className="workbench-vision-header">
           <input
             type="text"
@@ -139,12 +166,29 @@ function MediaVisionBoard({
             ×
           </button>
         </header>
-        <div className="workbench-vision-grid">
-          {items.length === 0 ? (
-            <p className="workbench-vision-empty">Drop files here</p>
-          ) : (
-            items.map(renderAssetCard)
-          )}
+
+        <div className="workbench-vision-partitions">
+          {renderDropSlot(vision.id, 'wireframe', 'Wireframe', wireframe, '0')}
+          <div className="workbench-vision-ref-row">
+            {refSlots.map((ref, i) =>
+              renderDropSlot(vision.id, 'reference', `Reference ${i + 1}`, ref, String(i)),
+            )}
+          </div>
+          <div
+            className={`workbench-vision-media${dragOverZone === `${vision.id}-media` ? ' workbench-vision-media--drag-over' : ''}`}
+            onDragOver={(e) => onDragOverZone(e, `${vision.id}-media`)}
+            onDragLeave={onDragLeaveZone}
+            onDrop={(e) => onDropZone(e, vision.id, 'media')}
+          >
+            <span className="workbench-vision-slot-label">Media</span>
+            <div className="workbench-vision-grid">
+              {media.length === 0 ? (
+                <p className="workbench-vision-empty">Drop files here</p>
+              ) : (
+                media.map(renderAssetCard)
+              )}
+            </div>
+          </div>
         </div>
       </section>
     );
@@ -162,7 +206,7 @@ function MediaVisionBoard({
 
       {visions.length === 0 ? (
         <p className="workbench-board-empty">
-          Create a vision, then drag files from the left into it.
+          Create a vision, then drag files from the left into wireframe, references, or media.
         </p>
       ) : (
         visions.map(renderVisionCluster)

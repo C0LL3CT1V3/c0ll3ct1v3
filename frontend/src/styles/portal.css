@@ -880,6 +880,65 @@
   padding: 1rem 0;
 }
 
+.workbench-vision-partitions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.workbench-vision-slot {
+  border: 1px dashed #3a3a48;
+  border-radius: 8px;
+  padding: 0.5rem;
+  min-height: 4.5rem;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.workbench-vision-slot--wireframe {
+  max-width: 220px;
+}
+
+.workbench-vision-slot--drag-over,
+.workbench-vision-media--drag-over {
+  border-color: #4a6cf7;
+  background: rgba(74, 108, 247, 0.08);
+}
+
+.workbench-vision-slot-label {
+  display: block;
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #888;
+  margin-bottom: 0.35rem;
+}
+
+.workbench-vision-slot-empty {
+  margin: 0.5rem 0 0;
+  font-size: 0.75rem;
+  color: #555;
+  text-align: center;
+}
+
+.workbench-vision-ref-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+
+.workbench-vision-media {
+  border: 1px dashed #3a3a48;
+  border-radius: 8px;
+  padding: 0.5rem;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.portal-file-role {
+  font-size: 0.6rem;
+  color: #c4a574;
+  text-transform: capitalize;
+}
+
 .workbench-asset {
   position: relative;
   background: #1a1a22;
@@ -1265,6 +1324,75 @@
 
 .epk-preview-frame-inner {
   min-height: 320px;
+}
+
+.epk-preview-frame-inner--html {
+  min-height: 480px;
+  height: 100%;
+}
+
+.epk-preview-iframe {
+  width: 100%;
+  min-height: 480px;
+  height: 100%;
+  border: none;
+  background: #fff;
+}
+
+.epk-builder-setup {
+  display: grid;
+  grid-template-columns: minmax(140px, 1fr) 2fr auto;
+  gap: 0.75rem;
+  align-items: end;
+  margin-bottom: 0.75rem;
+  padding: 0 0 0.75rem;
+  border-bottom: 1px solid #2a2a32;
+}
+
+.epk-builder-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.epk-builder-field-label {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #888;
+}
+
+.epk-builder-field select,
+.epk-builder-field textarea {
+  width: 100%;
+  padding: 0.45rem 0.5rem;
+  border-radius: 6px;
+  border: 1px solid #3a3a48;
+  background: #0f0f12;
+  color: #e8e8ec;
+  font-family: inherit;
+  font-size: 0.85rem;
+}
+
+.epk-builder-field--spec textarea {
+  resize: vertical;
+  min-height: 4.5rem;
+}
+
+.epk-build-mvp-btn {
+  white-space: nowrap;
+}
+
+.epk-builder-meta {
+  margin-bottom: 0.5rem;
+}
+
+.epk-builder-critique,
+.epk-builder-cycles {
+  margin: 0.25rem 0 0;
+  font-size: 0.8rem;
+  color: #a8a8b8;
 }
 
 .epk-annotate-panel {

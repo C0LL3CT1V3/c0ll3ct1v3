@@ -31,6 +31,27 @@ MANAGER_TOOLS: list[dict[str, Any]] = [
     {
         "type": "function",
         "function": {
+            "name": "build_epk_from_vision",
+            "description": (
+                "Build an HTML/CSS EPK MVP from the active vision pack (wireframe, references, media) "
+                "and artist spec. Runs render + vision critique loop."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "vision_id": {"type": "string", "description": "Workbench vision group id."},
+                    "spec": {
+                        "type": "string",
+                        "description": "Design brief / spec for the press kit.",
+                    },
+                },
+                "required": ["vision_id", "spec"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "update_epk_draft",
             "description": (
                 "Update the EPK draft preview (layout, theme, copy). Does not publish live. "
@@ -50,7 +71,7 @@ MANAGER_TOOLS: list[dict[str, Any]] = [
     },
 ]
 
-ALLOWED_TOOL_NAMES = frozenset({"reply_to_artist", "update_epk_draft"})
+ALLOWED_TOOL_NAMES = frozenset({"reply_to_artist", "update_epk_draft", "build_epk_from_vision"})
 
 
 @dataclass
@@ -88,6 +109,40 @@ def execute_tool(
         return ToolExecutionResult(
             reply=text or "How can I help with your EPK or next steps?",
             tool_used="reply_to_artist",
+        )
+
+    if name == "build_epk_from_vision":
+        from .epk_build_loop import build_epk_from_vision as run_build
+
+        vision_id = (args.get("vision_id") or thread.vision_id or "").strip()
+        spec = (args.get("spec") or user_message).strip()
+        if not vision_id:
+            return ToolExecutionResult(
+                reply="Select a vision group in the EPK builder first, then ask to build.",
+                tool_used="build_epk_from_vision",
+            )
+        if not spec:
+            return ToolExecutionResult(
+                reply="Add a design spec describing the EPK you want.",
+                tool_used="build_epk_from_vision",
+            )
+        result = run_build(db, artist, thread, vision_id=vision_id, spec=spec)
+        reply = result.get("reasoning_summary") or "Built EPK preview."
+        critique = result.get("critique_summary")
+        if critique:
+            reply = f"{reply}\n\n{critique}"
+        return ToolExecutionResult(
+            reply=reply,
+            metadata={
+                "iteration_id": result.get("iteration_id"),
+                "type": "epk_build",
+                "match_score": result.get("match_score"),
+                "revision_cycles": result.get("revision_cycles"),
+            },
+            tool_used="build_epk_from_vision",
+            draft_updated=True,
+            iteration_id=result.get("iteration_id"),
+            reasoning_summary=result.get("reasoning_summary"),
         )
 
     if name == "update_epk_draft":

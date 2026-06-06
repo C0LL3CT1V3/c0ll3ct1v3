@@ -88,6 +88,11 @@ class Settings(BaseSettings):
     # Manager agent tool dispatch: auto | native | prompt
     # prompt = JSON tool object (best for Qwen + future fine-tuning); native = OpenRouter tools API
     manager_tool_mode: str = "auto"
+    # EPK html_v1 build loop
+    epk_playwright_enabled: bool = False
+    epk_sim_base_url: str = "http://localhost:8080"
+    epk_build_max_revisions: int = 2
+    manager_vision_model: str = "google/gemini-2.0-flash-001"
     openai_api_key: str = ""
     openai_model: str = "gpt-4o-mini"
     anthropic_api_key: str = ""

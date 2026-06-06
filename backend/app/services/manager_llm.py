@@ -49,6 +49,20 @@ def load_epk_patch_template() -> str:
     return _load_prompt_file("manager_epk_patch.md", "Return JSON with reasoning, reasoning_summary, and patch.")
 
 
+def load_epk_html_generate_template() -> str:
+    return _load_prompt_file(
+        "manager_epk_html_generate.md",
+        "Return JSON with reasoning_summary, html, css, asset_bindings.",
+    )
+
+
+def load_epk_vision_critique_template() -> str:
+    return _load_prompt_file(
+        "manager_epk_vision_critique.md",
+        "Return JSON with match_score, major_gaps, minor_gaps, should_revise, critique_summary.",
+    )
+
+
 def _manager_identity_path() -> Path:
     return _prompt_path("manager_identity.md")
 
@@ -349,6 +363,44 @@ def _call_llm_json(system: str, user: str, history: list[dict] | None = None) ->
     return {}
 
 
+def _call_llm_json_any(
+    system: str,
+    user: str | list[dict[str, Any]],
+    *,
+    json_mode: bool = True,
+    model: str | None = None,
+    max_tokens: int | None = None,
+) -> dict[str, Any]:
+    messages: list[dict[str, Any]] = [{"role": "system", "content": system}]
+    messages.append({"role": "user", "content": user})
+
+    provider = _effective_provider()
+    if provider == "openrouter" and (settings.openrouter_api_key or "").strip():
+        chosen_model = model or resolved_manager_model()
+        body: dict[str, Any] = {
+            "model": chosen_model,
+            "messages": messages,
+            "max_tokens": max_tokens or settings.manager_llm_max_tokens,
+            "provider": {"allow_fallbacks": True},
+        }
+        if json_mode:
+            body["response_format"] = {"type": "json_object"}
+        with httpx.Client(timeout=float(settings.manager_llm_timeout_seconds)) as client:
+            resp = client.post(_OPENROUTER_URL, headers=_openrouter_headers(), json=body)
+            if resp.status_code >= 400:
+                logger.warning("OpenRouter JSON call failed: %s", resp.text[:300])
+                return {}
+            data = resp.json()
+        choice = (data.get("choices") or [{}])[0]
+        content = ((choice.get("message") or {}).get("content") or "").strip()
+        return _parse_json_response(content)
+
+    if provider == "openai":
+        content = _chat_text(messages, json_mode=json_mode)
+        return _parse_json_response(content)
+    return {}
+
+
 def generate_epk_patch(
     system_prompt: str,
     user_prompt: str,
@@ -383,3 +435,100 @@ def refine_epk_from_annotations(
     if parsed.get("patch") is not None:
         return parsed
     return _stub_epk_patch(original_prompt, draft, refine=True)
+
+
+def _stub_epk_html(spec: str, pack: dict, artist_name: str) -> dict[str, Any]:
+    media = pack.get("media") or []
+    bindings: dict[str, str] = {}
+    if media:
+        bindings["hero_photo"] = media[0]["id"]
+    html = (
+        f"<main class='epk'><header><h1>{artist_name}</h1>"
+        f"<p>{spec[:120]}</p></header>"
+        "<section class='photos'>"
+        + (
+            f"<img src='{{{{hero_photo}}}}' alt='Hero' />"
+            if bindings
+            else "<p>Add media to your vision pack.</p>"
+        )
+        + "</section></main>"
+    )
+    css = (
+        "body { font-family: Georgia, serif; margin: 0; background: #faf9f6; color: #1a1a1a; }"
+        ".epk { max-width: 960px; margin: 0 auto; padding: 2rem; }"
+        "header h1 { font-size: 2.5rem; margin-bottom: 0.5rem; }"
+        ".photos img { width: 100%; border-radius: 8px; }"
+    )
+    return {
+        "reasoning_summary": "Built a starter HTML EPK (stub mode — set OPENROUTER_API_KEY for live AI).",
+        "html": html,
+        "css": css,
+        "asset_bindings": bindings,
+    }
+
+
+def generate_epk_html(
+    system_prompt: str,
+    *,
+    spec: str,
+    vision_pack: dict,
+    artist_name: str = "Artist",
+    critique_notes: str | None = None,
+) -> dict[str, Any]:
+    template = load_epk_html_generate_template()
+    user = (
+        f"Artist spec:\n{spec}\n\n"
+        f"Vision pack:\n{json.dumps(vision_pack, indent=2)}\n\n"
+    )
+    if critique_notes:
+        user += f"Revision notes from vision critique:\n{critique_notes}\n\n"
+    user += "Return JSON with reasoning_summary, html, css, asset_bindings."
+    parsed = _call_llm_json_any(f"{system_prompt}\n\n{template}", user, json_mode=True, max_tokens=4000)
+    if parsed.get("html"):
+        return parsed
+    return _stub_epk_html(spec, vision_pack, artist_name)
+
+
+def critique_epk_screenshot(
+    *,
+    spec: str,
+    vision_pack: dict,
+    screenshot_png: bytes | None,
+) -> dict[str, Any]:
+    template = load_epk_vision_critique_template()
+    text_block = f"Artist spec:\n{spec}\n\nVision pack metadata:\n{json.dumps(vision_pack, indent=2)}"
+    user_content: list[dict[str, Any]] = [{"type": "text", "text": text_block}]
+
+    import base64
+
+    if screenshot_png:
+        b64 = base64.standard_b64encode(screenshot_png).decode("ascii")
+        user_content.append({"type": "image_url", "image_url": {"url": f"data:image/png;base64,{b64}"}})
+    wf = vision_pack.get("wireframe")
+    if wf and wf.get("preview_url"):
+        user_content.append(
+            {
+                "type": "image_url",
+                "image_url": {"url": wf["preview_url"]},
+            }
+        )
+    for ref in (vision_pack.get("references") or [])[:3]:
+        if ref.get("preview_url"):
+            user_content.append({"type": "image_url", "image_url": {"url": ref["preview_url"]}})
+
+    parsed = _call_llm_json_any(
+        template,
+        user_content,
+        json_mode=True,
+        model=settings.manager_vision_model,
+        max_tokens=1200,
+    )
+    if parsed.get("critique_summary") is not None or parsed.get("match_score") is not None:
+        return parsed
+    return {
+        "match_score": 0.6,
+        "major_gaps": [],
+        "minor_gaps": [],
+        "should_revise": False,
+        "critique_summary": "Preview generated. Review the sim and request changes if needed.",
+    }

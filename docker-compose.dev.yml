@@ -23,6 +23,9 @@ services:
       - SPACES_PUBLIC_ENDPOINT=http://localhost:9000
       - MEDIA_CDN_BASE_URL=http://localhost:9000/pj-media
       - REDIS_URL=redis://redis:6379/0
+      - EPK_PLAYWRIGHT_ENABLED=false
+      - EPK_SIM_BASE_URL=http://localhost:8080
+      - EPK_BUILD_MAX_REVISIONS=2
     command: uvicorn app.main:app --host 0.0.0.0 --port 8080 --reload
     depends_on:
       - db

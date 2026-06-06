@@ -12,7 +12,11 @@ or
 {"tool": "update_epk_draft", "args": {"prompt": "Clear EPK design/copy instruction."}}
 ```
 
-Allowed `tool` values: `reply_to_artist`, `update_epk_draft` only.
+```json
+{"tool": "build_epk_from_vision", "args": {"vision_id": "...", "spec": "Design brief."}}
+```
+
+Allowed `tool` values: `reply_to_artist`, `build_epk_from_vision`, `update_epk_draft` only.
 Do not emit EPK patch JSON here — `update_epk_draft` runs the builder internally.
 
 In **epk_builder** thread mode you MUST return one of the JSON objects above on every turn.

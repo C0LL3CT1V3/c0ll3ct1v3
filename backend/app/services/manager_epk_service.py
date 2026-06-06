@@ -41,7 +41,13 @@ def _screenshot_presign(tenant_slug: str, iteration_id: str) -> tuple[str | None
         return None, None
 
 
-def get_or_create_thread(db: Session, artist: Artist, mode: str, thread_id: str | None) -> ManagerThread:
+def get_or_create_thread(
+    db: Session,
+    artist: Artist,
+    mode: str,
+    thread_id: str | None,
+    vision_id: str | None = None,
+) -> ManagerThread:
     if thread_id:
         row = (
             db.query(ManagerThread)
@@ -50,8 +56,12 @@ def get_or_create_thread(db: Session, artist: Artist, mode: str, thread_id: str 
         )
         if not row:
             raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Thread not found.")
+        if vision_id and row.vision_id != vision_id:
+            row.vision_id = vision_id
+            db.commit()
+            db.refresh(row)
         return row
-    row = ManagerThread(artist_id=artist.id, mode=mode)
+    row = ManagerThread(artist_id=artist.id, mode=mode, vision_id=vision_id)
     db.add(row)
     db.commit()
     db.refresh(row)
@@ -183,6 +193,7 @@ def build_preview_payload(db: Session, artist: Artist, design: dict) -> dict[str
                 "title": a.title,
                 "mime_type": None,
                 "url": _preview_url_for_asset(db, a) if a.asset_type in ("audio", "video") else None,
+                "stream_url": _preview_url_for_asset(db, a) if a.asset_type in ("audio", "video") else None,
             }
             for a in assets
             if a.asset_type in ("audio", "video")
@@ -194,6 +205,9 @@ def build_preview_payload(db: Session, artist: Artist, design: dict) -> dict[str
                 "url": _preview_url_for_asset(db, by_id[t["asset_id"]])
                 if t.get("asset_id") in by_id
                 else t.get("url"),
+                "stream_url": _preview_url_for_asset(db, by_id[t["asset_id"]])
+                if t.get("asset_id") in by_id
+                else t.get("stream_url") or t.get("url"),
             }
             for t in tracks
         ]

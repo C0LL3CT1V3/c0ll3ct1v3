@@ -87,3 +87,8 @@ def run_manager_schema_migrations(engine: Engine) -> None:
             connection.execute(
                 text("CREATE INDEX IF NOT EXISTS ix_epk_iterations_artist_id ON epk_iterations (artist_id, created_at)")
             )
+
+        if inspector.has_table("manager_threads"):
+            thread_cols = {column["name"] for column in inspector.get_columns("manager_threads")}
+            if "vision_id" not in thread_cols:
+                connection.execute(text("ALTER TABLE manager_threads ADD COLUMN vision_id VARCHAR(36)"))

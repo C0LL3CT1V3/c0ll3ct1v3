@@ -9,11 +9,13 @@ from pydantic import BaseModel, Field
 
 class ManagerThreadCreate(BaseModel):
     mode: str = Field(default="general", pattern="^(general|epk_builder)$")
+    vision_id: str | None = Field(None, max_length=36)
 
 
 class ManagerThreadOut(BaseModel):
     id: str
     mode: str
+    vision_id: str | None = None
     created_at: Any
 
     model_config = {"from_attributes": True}
@@ -69,10 +71,17 @@ class EpkPreviewMediaItem(BaseModel):
 
 
 class EpkDraftOut(BaseModel):
-    design: dict[str, Any]
-    site: dict[str, Any]
+    format: str = "layout"
+    design: dict[str, Any] = Field(default_factory=dict)
+    site: dict[str, Any] = Field(default_factory=dict)
     tracks: list[EpkPreviewMediaItem] = Field(default_factory=list)
     photos: list[EpkPreviewMediaItem] = Field(default_factory=list)
+    html: str | None = None
+    css: str | None = None
+    asset_bindings: dict[str, str] = Field(default_factory=dict)
+    vision_id: str | None = None
+    spec_snapshot: str | None = None
+    sim_render_url: str | None = None
 
 
 class EpkComponentMapOut(BaseModel):
@@ -130,3 +139,30 @@ class EpkTrainingConsentBody(BaseModel):
 
 class EpkPublishOut(BaseModel):
     epk_config: dict[str, Any]
+
+
+class EpkBuildFromVisionBody(BaseModel):
+    vision_id: str = Field(..., min_length=8, max_length=36)
+    spec: str = Field(..., min_length=1, max_length=8000)
+    thread_id: str | None = None
+
+
+class EpkBuildFromVisionOut(BaseModel):
+    iteration_id: str
+    thread_id: str
+    reasoning_summary: str | None = None
+    critique_summary: str | None = None
+    match_score: float | None = None
+    revision_cycles: int = 1
+    format: str = "html_v1"
+    html: str | None = None
+    css: str | None = None
+    asset_bindings: dict[str, str] = Field(default_factory=dict)
+    vision_id: str | None = None
+    spec_snapshot: str | None = None
+    sim_render_url: str | None = None
+    screenshot_storage_key: str | None = None
+    design: dict[str, Any] = Field(default_factory=dict)
+    site: dict[str, Any] = Field(default_factory=dict)
+    tracks: list[EpkPreviewMediaItem] = Field(default_factory=list)
+    photos: list[EpkPreviewMediaItem] = Field(default_factory=list)

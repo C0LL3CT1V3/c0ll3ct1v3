@@ -87,6 +87,11 @@ class AssetUpdateBody(BaseModel):
     tags: dict[str, Any] | None = None
     status: str | None = None
     vision_id: str | None = None  # set null to ungroup
+    vision_role: str | None = Field(
+        None,
+        pattern="^(wireframe|reference|media)$",
+        description="Partition within a vision group.",
+    )
 
 
 class VariantOut(BaseModel):

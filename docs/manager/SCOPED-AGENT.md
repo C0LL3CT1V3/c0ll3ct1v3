@@ -10,7 +10,11 @@ Set on the API server only (`backend/.env`):
 OPENROUTER_API_KEY=sk-or-v1-...
 MANAGER_LLM_PROVIDER=openrouter
 MANAGER_LLM_MODEL=anthropic/claude-3.5-haiku
+MANAGER_VISION_MODEL=google/gemini-2.0-flash-001
 MANAGER_CHAT_RATE_LIMIT_PER_MIN=20
+EPK_PLAYWRIGHT_ENABLED=false
+EPK_SIM_BASE_URL=http://localhost:8080
+EPK_BUILD_MAX_REVISIONS=2
 ```
 
 OpenRouter is OpenAI-compatible; the key never reaches the browser.
@@ -31,13 +35,46 @@ Prompt-mode schema: `backend/app/prompts/manager_chat_tools_prompt.md`
 | Tool | What it does |
 |------|----------------|
 | `reply_to_artist` | Conversational manager advice |
-| `update_epk_draft` | JSON patch → Postgres `epk_draft` preview (does **not** publish) |
+| `build_epk_from_vision` | HTML/CSS MVP from vision pack + spec (Playwright + vision critique loop) |
+| `update_epk_draft` | Legacy JSON layout patch (does **not** publish) |
 
 One tool call per chat turn. Unknown tools are rejected.
 
 Scope rules: `backend/app/prompts/manager_agent_scope.md`  
 Chat persona: `backend/app/prompts/manager_chat_persona.md` (no raw JSON)  
-EPK patch schema: `backend/app/prompts/manager_epk_patch.md`
+HTML generate: `backend/app/prompts/manager_epk_html_generate.md`  
+Vision critique: `backend/app/prompts/manager_epk_vision_critique.md`
+
+## Vision pack (workbench)
+
+Each vision group has three partitions (via `MediaAsset.tags.vision_role`):
+
+| Role | Limit | Use |
+|------|-------|-----|
+| `wireframe` | 1 | Layout target for agent + critique |
+| `reference` | 3 | Style / mood references |
+| `media` | unlimited | Assets bound into the generated page |
+
+API: `GET /media/visions/{id}/pack`
+
+## EPK build loop (html_v1)
+
+```
+Artist spec + vision pack
+  → POST /manager/epk/build-from-vision (or chat tool build_epk_from_vision)
+  → generate HTML/CSS (OpenRouter)
+  → GET /manager/epk/sim/render?token=… (sandboxed iframe + Playwright)
+  → vision critique (optional one revise, max EPK_BUILD_MAX_REVISIONS cycles)
+  → artist reviews interactive sim
+```
+
+Draft format stored in `artist.epk_draft`:
+
+```json
+{ "format": "html_v1", "html": "...", "css": "...", "asset_bindings": {}, "vision_id": "...", "spec_snapshot": "..." }
+```
+
+Enable Playwright screenshots: `EPK_PLAYWRIGHT_ENABLED=true` and `playwright install chromium` in the backend container.
 
 ## Flow
 
@@ -46,16 +83,15 @@ Portal POST /manager/chat
   → Auth0 tenant binding + rate limit
   → manager_agent.run_manager_turn()
   → OpenRouter (tools)
-  → optional internal EPK patch
+  → optional internal EPK patch or build loop
   → thread messages in Postgres
 ```
 
-EPK Builder passes `mode=epk_builder`. Frontend refreshes preview only when `draft_updated: true`.
+EPK Builder passes `mode=epk_builder`. Frontend refreshes preview when `draft_updated: true` or after **Build MVP**.
 
 ## Verify
 
 ```bash
-# After restarting backend
 curl -H "Authorization: Bearer $TOKEN" http://localhost:8080/manager/status
 ```
 
@@ -63,22 +99,15 @@ Expect `{ "configured": true, "provider": "openrouter", "model": "..." }`.
 
 ## Manual acceptance
 
-**Functional**
-
-1. Portal Manager → Q&A returns natural language (no JSON blobs)
-2. EPK Builder → design prompt updates preview when `draft_updated`
-3. EPK Builder → question with no tool call leaves preview unchanged
-4. Publish still required for live EPK
-
-**Quality (subjective)**
-
-- [ ] “dark minimal country EPK” → bio/headline suitable for a real press kit
-- [ ] Theme direction matches prompt
-- [ ] “make headline larger” adjusts hero, not a random block
+1. Create vision → assign wireframe, references, media in workbench
+2. EPK Builder → select vision, write spec, **Build MVP**
+3. Interactive sim loads in iframe; agent cycles ≤ 2
+4. Chat can call `build_epk_from_vision` with same vision + spec
+5. Publish still required for live EPK (html publish path TBD)
 
 ## Fallback
 
-Without `OPENROUTER_API_KEY`, chat returns a stub message and EPK iterate uses heuristic patches.
+Without `OPENROUTER_API_KEY`, build uses stub HTML. Without Playwright, critique runs without screenshot.
 
 ## CLI
 

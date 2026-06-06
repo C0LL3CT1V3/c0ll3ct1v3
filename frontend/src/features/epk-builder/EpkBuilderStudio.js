@@ -28,6 +28,19 @@ function EpkBuilderStudio({ onError }) {
     }
   };
 
+  const handleBuildMvp = async () => {
+    if (!builder.selectedVisionId || !builder.spec.trim()) {
+      onError?.('Select a vision and write a design spec first.');
+      return;
+    }
+    try {
+      onError?.('');
+      await builder.buildFromVision(builder.selectedVisionId, builder.spec.trim());
+    } catch (err) {
+      onError?.(err?.response?.data?.detail || err.message || 'Build failed.');
+    }
+  };
+
   const handleAnnotateSubmit = async (annotations) => {
     try {
       onError?.('');
@@ -60,12 +73,70 @@ function EpkBuilderStudio({ onError }) {
     }
   };
 
+  const busy = builder.phase === 'generating' || builder.phase === 'refining';
+
   return (
     <section className="epk-builder-studio">
       <header className="epk-builder-header">
         <h2 className="portal-panel-title">EPK Builder</h2>
-        <p className="epk-builder-lead">Design your press kit from workbench assets — chat, preview, annotate, publish.</p>
+        <p className="epk-builder-lead">
+          Build from a vision pack (wireframe, references, media) — preview the interactive sim, then refine.
+        </p>
       </header>
+
+      <div className="epk-builder-setup">
+        <label className="epk-builder-field">
+          <span className="epk-builder-field-label">Vision group</span>
+          <select
+            value={builder.selectedVisionId}
+            onChange={(e) => builder.setSelectedVisionId(e.target.value)}
+            disabled={busy}
+          >
+            <option value="">Select vision…</option>
+            {builder.visions.map((v) => (
+              <option key={v.id} value={v.id}>
+                {v.title}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="epk-builder-field epk-builder-field--spec">
+          <span className="epk-builder-field-label">Design spec</span>
+          <textarea
+            value={builder.spec}
+            onChange={(e) => builder.setSpec(e.target.value)}
+            placeholder="Describe the EPK: tone, layout, sections, copy direction…"
+            rows={3}
+            disabled={busy}
+          />
+        </label>
+        <button
+          type="button"
+          className="portal-btn portal-btn--primary epk-build-mvp-btn"
+          disabled={busy || !builder.selectedVisionId || !builder.spec.trim()}
+          onClick={handleBuildMvp}
+        >
+          {busy ? 'Building…' : 'Build MVP'}
+        </button>
+      </div>
+
+      {builder.reasoningSummary || builder.critiqueSummary ? (
+        <div className="epk-builder-meta">
+          {builder.reasoningSummary ? (
+            <p className="manager-reasoning-hint">{builder.reasoningSummary}</p>
+          ) : null}
+          {builder.critiqueSummary ? (
+            <p className="epk-builder-critique">{builder.critiqueSummary}</p>
+          ) : null}
+          {builder.revisionCycles != null ? (
+            <p className="epk-builder-cycles">
+              Agent cycles: {builder.revisionCycles}
+              {builder.matchScore != null ? ` · Match score: ${Math.round(builder.matchScore * 100)}%` : ''}
+            </p>
+          ) : null}
+        </div>
+      ) : null}
+
       <div className="epk-builder-chat">
         <ManagerChat
           layout="horizontal"
@@ -83,7 +154,7 @@ function EpkBuilderStudio({ onError }) {
             type="button"
             className={`portal-btn portal-btn--ghost${annotateMode ? ' portal-btn--active' : ''}`}
             onClick={() => setAnnotateMode((v) => !v)}
-            disabled={!builder.currentIterationId}
+            disabled={!builder.currentIterationId || builder.draft?.format === 'html_v1'}
           >
             Annotate
           </button>

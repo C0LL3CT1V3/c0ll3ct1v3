@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.responses import PlainTextResponse
+from fastapi.responses import HTMLResponse, PlainTextResponse
 from sqlalchemy.orm import Session
 
 from ..manager_auth import get_manager_artist
@@ -14,6 +14,8 @@ from ...models.manager import EpkIteration, ManagerThread
 from ...schemas.manager_schemas import (
     EpkAcceptBody,
     EpkAnnotateBody,
+    EpkBuildFromVisionBody,
+    EpkBuildFromVisionOut,
     EpkComponentMapOut,
     EpkDraftOut,
     EpkIterateBody,
@@ -30,6 +32,9 @@ from ...schemas.manager_schemas import (
 )
 from ...services.manager_llm import effective_manager_provider, manager_llm_configured, resolved_manager_model
 from ...services.manager_rate_limit import enforce_manager_chat_rate_limit
+from ...services.epk_html_draft import draft_content_hash, is_html_draft
+from ...services.epk_sim_token import mint_sim_token, verify_sim_token
+from ...services.epk_build_loop import build_epk_from_vision
 from ...services.epk_component_registry import get_component_map
 from ...services.epk_draft import get_or_init_draft
 from ...services.manager_epk_service import (
@@ -81,7 +86,7 @@ def create_thread(
     db: Session = Depends(get_db),
     artist: Artist = Depends(get_manager_artist),
 ) -> ManagerThread:
-    return get_or_create_thread(db, artist, body.mode, None)
+    return get_or_create_thread(db, artist, body.mode, None, body.vision_id)
 
 
 @router.get("/threads/{thread_id}", response_model=ManagerThreadDetailOut)
@@ -135,8 +140,59 @@ def get_epk_draft(
     if not artist.epk_draft:
         artist.epk_draft = design
         db.commit()
+    if is_html_draft(design):
+        draft_hash = draft_content_hash(design)
+        token = mint_sim_token(artist_id=artist.id, draft_hash=draft_hash)
+        sim_url = f"{settings.epk_sim_base_url.rstrip('/')}/manager/epk/sim/render?token={token}"
+        return EpkDraftOut(
+            format="html_v1",
+            html=design.get("html"),
+            css=design.get("css"),
+            asset_bindings=design.get("asset_bindings") or {},
+            vision_id=design.get("vision_id"),
+            spec_snapshot=design.get("spec_snapshot"),
+            sim_render_url=sim_url,
+        )
     payload = build_preview_payload(db, artist, design)
-    return EpkDraftOut(**payload)
+    return EpkDraftOut(format="layout", **payload)
+
+
+@router.get("/epk/sim/render", response_class=HTMLResponse)
+def epk_sim_render(
+    token: str,
+    db: Session = Depends(get_db),
+) -> HTMLResponse:
+    from ...services.epk_html_draft import render_draft_html
+
+    info = verify_sim_token(token)
+    artist = db.query(Artist).filter(Artist.id == info["artist_id"]).first()
+    if not artist or not isinstance(artist.epk_draft, dict):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Draft not found.")
+    draft = artist.epk_draft
+    if not is_html_draft(draft):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Not an html_v1 draft.")
+    if draft_content_hash(draft) != info["draft_hash"]:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail="Draft hash mismatch.")
+    html = render_draft_html(db, artist, draft)
+    return HTMLResponse(content=html, headers={"Cache-Control": "no-store"})
+
+
+@router.post("/epk/build-from-vision", response_model=EpkBuildFromVisionOut)
+def epk_build_from_vision_route(
+    body: EpkBuildFromVisionBody,
+    db: Session = Depends(get_db),
+    artist: Artist = Depends(get_manager_artist),
+) -> EpkBuildFromVisionOut:
+    enforce_manager_chat_rate_limit(artist.id)
+    thread = get_or_create_thread(db, artist, "epk_builder", body.thread_id, body.vision_id)
+    result = build_epk_from_vision(
+        db,
+        artist,
+        thread,
+        vision_id=body.vision_id,
+        spec=body.spec.strip(),
+    )
+    return EpkBuildFromVisionOut(**result)
 
 
 @router.get("/epk/component-map", response_model=EpkComponentMapOut)

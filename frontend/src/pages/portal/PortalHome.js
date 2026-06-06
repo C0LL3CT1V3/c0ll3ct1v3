@@ -57,6 +57,7 @@ function PortalHome({ profile }) {
             error={workbench.error}
             onError={(msg) => workbench.setError(msg)}
             assignAsset={workbench.assignAsset}
+            assignAssetToVisionRole={workbench.assignAssetToVisionRole}
             deleteAsset={workbench.deleteAsset}
             createVision={workbench.createVision}
             renameVision={workbench.renameVision}
