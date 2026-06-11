@@ -1,6 +1,6 @@
 import React from 'react';
 import EpkMediaEmbed from '../EpkMediaEmbed';
-import { blockById, blockByType, collectAssetIds } from '../layoutUtils';
+import { blockById, collectAssetIds } from '../layoutUtils';
 
 function EditorialTemplate({ site, layout, trackById, photoById, theme }) {
   const hero = blockById(layout, 'hero', 'hero');

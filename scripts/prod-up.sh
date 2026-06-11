@@ -17,7 +17,14 @@ REGION="${AWS_REGION:-${REGION:-us-east-2}}"
 AWS_ACCOUNT="${AWS_ACCOUNT:-$(aws sts get-caller-identity --query Account --output text)}"
 export ECR_REGISTRY="${ECR_REGISTRY:-${AWS_ACCOUNT}.dkr.ecr.${REGION}.amazonaws.com}"
 
-COMPOSE=(docker-compose -f docker-compose.prod.yml)
+if docker compose version >/dev/null 2>&1; then
+  COMPOSE=(docker compose -f docker-compose.prod.yml)
+elif command -v docker-compose >/dev/null 2>&1; then
+  COMPOSE=(docker-compose -f docker-compose.prod.yml)
+else
+  echo "ERROR: Docker Compose not found. Install the plugin: sudo apt install docker-compose-plugin" >&2
+  exit 1
+fi
 
 echo "ECR registry: $ECR_REGISTRY"
 

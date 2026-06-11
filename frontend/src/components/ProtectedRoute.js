@@ -17,7 +17,7 @@ function ProtectedRoute({ children }) {
         redirect_uri: window.location.origin,
       },
     });
-  }, [shouldRedirect, location.pathname, loginWithRedirect]);
+  }, [shouldRedirect, location.pathname, location.search, loginWithRedirect]);
 
   if (isLoading) {
     return <div className="App">Loading authentication...</div>;
