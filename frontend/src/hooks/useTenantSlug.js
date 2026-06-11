@@ -39,7 +39,7 @@ export function useTenantSlug() {
   return getSubdomain();
 }
 
-export function epkPublicUrl(tenantSlug) {
+export function profilePublicUrl(tenantSlug) {
   if (!tenantSlug) return null;
   const { protocol, port } = window.location;
   const hostname = window.location.hostname;
@@ -49,3 +49,6 @@ export function epkPublicUrl(tenantSlug) {
   }
   return `${protocol}//${tenantSlug}.c0ll3ct1v3.xyz`;
 }
+
+/** @deprecated use profilePublicUrl */
+export const epkPublicUrl = profilePublicUrl;

@@ -1,11 +1,19 @@
 import React from 'react';
+import { NavLink } from 'react-router-dom';
 import { useAuth0 } from '@auth0/auth0-react';
 import { epkPublicUrl } from '../hooks/useTenantSlug';
+
+/** Profile Studio and Data are shelved until the next release. */
+const SECTIONS = [
+  { to: '/portal/vault', label: 'Vault' },
+  { to: '/portal/epk', label: 'EPK' },
+];
 
 function PortalLayout({ profile, children }) {
   const { logout } = useAuth0();
   const tenantSlug = profile?.tenant_slug;
-  const epkUrl = tenantSlug ? epkPublicUrl(tenantSlug) : null;
+  const epkUrl = tenantSlug ? `${epkPublicUrl(tenantSlug)}/epk` : null;
+  const epkPublished = profile?.epk_public_published;
 
   return (
     <div className="portal-layout">
@@ -16,15 +24,15 @@ function PortalLayout({ profile, children }) {
             <span className="portal-artist-name">{profile?.display_name || 'Artist portal'}</span>
             {tenantSlug ? (
               <span className="portal-tenant-slug">
-                EPK: <code>{tenantSlug}</code>
+                Page: <code>{tenantSlug}</code>
               </span>
             ) : null}
           </div>
         </div>
         <div className="portal-header-right">
-          {epkUrl ? (
+          {epkUrl && epkPublished ? (
             <a href={epkUrl} target="_blank" rel="noreferrer" className="portal-link">
-              View your EPK
+              View EPK
             </a>
           ) : null}
           <button
@@ -36,6 +44,19 @@ function PortalLayout({ profile, children }) {
           </button>
         </div>
       </header>
+      <nav className="portal-studio-mode-tabs" aria-label="Portal sections">
+        {SECTIONS.map((section) => (
+          <NavLink
+            key={section.to}
+            to={section.to}
+            className={({ isActive }) =>
+              `portal-btn portal-btn--ghost${isActive ? ' portal-btn--active' : ''}`
+            }
+          >
+            {section.label}
+          </NavLink>
+        ))}
+      </nav>
       <main className="portal-main portal-main--studio">{children}</main>
     </div>
   );

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useManagerChat } from './useManagerChat';
 
 function ManagerChat({
@@ -9,6 +9,8 @@ function ManagerChat({
   onAfterReply,
   phase,
   reasoningSummary,
+  prefillMessage,
+  onPrefillConsumed,
 }) {
   const { messages, sendMessage, sending, error } = useManagerChat({
     mode,
@@ -18,6 +20,12 @@ function ManagerChat({
   });
   const [input, setInput] = useState('');
   const horizontal = layout === 'horizontal';
+
+  useEffect(() => {
+    if (!prefillMessage) return;
+    setInput(prefillMessage);
+    onPrefillConsumed?.();
+  }, [prefillMessage, onPrefillConsumed]);
 
   const onSubmit = (e) => {
     e.preventDefault();

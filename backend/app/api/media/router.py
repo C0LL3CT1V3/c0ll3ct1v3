@@ -21,6 +21,7 @@ from ...schemas.media_schemas import (
     AssetDetail,
     AssetListItem,
     AssetUpdateBody,
+    ReferenceUrlBody,
     ChooserDropboxImportBody,
     ChooserDropboxImportOut,
     ChooserGoogleImportBody,
@@ -44,7 +45,13 @@ from ...schemas.vision_schemas import (
     VisionUpdateBody,
     WorkbenchOut,
 )
-from ...services.vision_pack import apply_vision_assignment, get_vision_pack, vision_role_from_tags
+from ...services.url_reference import create_url_reference_asset, external_url_from_asset
+from ...services.vision_pack import (
+    apply_folder_assignment,
+    apply_vision_assignment,
+    get_vision_pack,
+    vision_role_from_tags,
+)
 from ...services.storage_paths import workbench_master_key, is_public_delivery_key
 from ...services.media_type import infer_asset_type, infer_mime_type
 from ...services.spaces_storage import (
@@ -503,6 +510,24 @@ def get_asset(
     )
 
 
+@router.post("/reference-urls", response_model=AssetDetail)
+def create_reference_url(
+    body: ReferenceUrlBody,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> AssetDetail:
+    """Add an external URL as a vision reference (no upload)."""
+    workspace = tenant_slug_for_user(db, current_user)
+    asset = create_url_reference_asset(
+        db,
+        tenant_slug=workspace,
+        vision_id=body.vision_id,
+        url=body.url,
+        created_by=current_user.auth0_sub or str(current_user.id),
+    )
+    return get_asset(asset.id, db, current_user)
+
+
 @router.patch("/assets/{asset_id}", response_model=AssetDetail)
 def update_asset(
     asset_id: str,
@@ -527,7 +552,9 @@ def update_asset(
     vision_role = body.vision_role if "vision_role" in patch_fields else None
 
     if "vision_id" in patch_fields or "vision_role" in patch_fields:
-        if vision_id is None and vision_role is None and "vision_id" in patch_fields:
+        if "vision_role" not in patch_fields:
+            apply_folder_assignment(db, row, vision_id=vision_id)
+        elif vision_id is None and vision_role is None and "vision_id" in patch_fields:
             apply_vision_assignment(db, row, vision_id=None, vision_role=None)
         else:
             if vision_id:
@@ -672,6 +699,9 @@ def preview_url(
     if not row:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Asset not found")
     _assert_asset_in_user_workspace(row, db, current_user)
+    external = external_url_from_asset(row)
+    if external:
+        return {"url": external}
     ver = next((v for v in row.versions if v.is_current), None)
     if not ver:
         return {"url": None}

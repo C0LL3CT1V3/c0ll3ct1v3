@@ -70,6 +70,27 @@ class EpkPreviewMediaItem(BaseModel):
     mime_type: str | None = None
 
 
+class EpkCompletenessItemOut(BaseModel):
+    id: str
+    category: str
+    label: str
+    status: str
+    priority: str
+    detail: str
+    suggestion: str
+
+
+class EpkCompletenessOut(BaseModel):
+    score: float = 0.0
+    required_score: float = 0.0
+    summary: str = ""
+    agent_brief: str = ""
+    items: list[EpkCompletenessItemOut] = Field(default_factory=list)
+    gaps: list[EpkCompletenessItemOut] = Field(default_factory=list)
+    gap_ids: list[str] = Field(default_factory=list)
+    inventory: dict[str, Any] = Field(default_factory=dict)
+
+
 class EpkDraftOut(BaseModel):
     format: str = "layout"
     design: dict[str, Any] = Field(default_factory=dict)
@@ -82,6 +103,9 @@ class EpkDraftOut(BaseModel):
     vision_id: str | None = None
     spec_snapshot: str | None = None
     sim_render_url: str | None = None
+    font_palette: dict[str, Any] | None = None
+    google_fonts_href: str | None = None
+    completeness: EpkCompletenessOut | None = None
 
 
 class EpkComponentMapOut(BaseModel):
@@ -120,10 +144,15 @@ class EpkRefineOut(BaseModel):
     iteration_id: str
     parent_iteration_id: str
     reasoning_summary: str | None = None
-    design: dict[str, Any]
-    site: dict[str, Any]
+    format: str = "layout"
+    design: dict[str, Any] = Field(default_factory=dict)
+    site: dict[str, Any] = Field(default_factory=dict)
     tracks: list[EpkPreviewMediaItem] = Field(default_factory=list)
     photos: list[EpkPreviewMediaItem] = Field(default_factory=list)
+    html: str | None = None
+    css: str | None = None
+    asset_bindings: dict[str, str] = Field(default_factory=dict)
+    sim_render_url: str | None = None
     annotations_resolved: list[dict[str, Any]] = Field(default_factory=list)
     screenshot_upload_url: str | None = None
     screenshot_storage_key: str | None = None
@@ -141,10 +170,53 @@ class EpkPublishOut(BaseModel):
     epk_config: dict[str, Any]
 
 
+class EpkCustomHtmlBody(BaseModel):
+    html: str = Field(..., min_length=1, max_length=512_000)
+    css: str = Field(default="", max_length=128_000)
+    asset_bindings: dict[str, str] = Field(default_factory=dict)
+    google_fonts_href: str | None = Field(None, max_length=2048)
+
+
 class EpkBuildFromVisionBody(BaseModel):
     vision_id: str = Field(..., min_length=8, max_length=36)
     spec: str = Field(..., min_length=1, max_length=8000)
     thread_id: str | None = None
+
+
+class EpkIterationSummaryOut(BaseModel):
+    id: str
+    step: str
+    format: str = "layout"
+    is_seed: bool = False
+    user_prompt: str = ""
+    reasoning_summary: str | None = None
+    vision_id: str | None = None
+    spec_snapshot: str | None = None
+    match_score: float | None = None
+    revision_cycles: int | None = None
+    artist_accepted: bool = False
+    parent_iteration_id: str | None = None
+    screenshot_url: str | None = None
+    created_at: Any
+
+    model_config = {"from_attributes": True}
+
+
+class EpkIterationListOut(BaseModel):
+    iterations: list[EpkIterationSummaryOut] = Field(default_factory=list)
+
+
+class EpkIterationDetailOut(EpkDraftOut):
+    id: str
+    step: str
+    user_prompt: str = ""
+    reasoning_summary: str | None = None
+    match_score: float | None = None
+    revision_cycles: int | None = None
+    artist_accepted: bool = False
+    parent_iteration_id: str | None = None
+    screenshot_url: str | None = None
+    created_at: Any
 
 
 class EpkBuildFromVisionOut(BaseModel):
@@ -161,6 +233,8 @@ class EpkBuildFromVisionOut(BaseModel):
     vision_id: str | None = None
     spec_snapshot: str | None = None
     sim_render_url: str | None = None
+    font_palette: dict[str, Any] | None = None
+    google_fonts_href: str | None = None
     screenshot_storage_key: str | None = None
     design: dict[str, Any] = Field(default_factory=dict)
     site: dict[str, Any] = Field(default_factory=dict)

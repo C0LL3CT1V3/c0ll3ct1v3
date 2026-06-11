@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { getAssetDragId } from './mediaDrag';
+import { getAssetDragId, setAssetDragData } from './mediaDrag';
+import { externalUrlForAsset, isUrlReferenceAsset } from './mediaUrlDrop';
 
 function visionRole(asset) {
   return asset?.tags?.vision_role || 'media';
@@ -22,12 +23,16 @@ function MediaVisionBoard({
   error,
   onError,
   assignAssetToVisionRole,
+  createReferenceFromUrl,
   deleteAsset,
   createVision,
   renameVision,
   deleteVision,
+  embedded = false,
 }) {
   const [dragOverZone, setDragOverZone] = useState(null);
+  const [referenceUrls, setReferenceUrls] = useState({});
+  const [referenceSaving, setReferenceSaving] = useState(null);
 
   const onDragOverZone = (e, zoneId) => {
     e.preventDefault();
@@ -83,15 +88,15 @@ function MediaVisionBoard({
     }
   };
 
-  const renderAssetCard = (a) => (
+  const renderAssetCard = (a) => {
+    const urlRef = isUrlReferenceAsset(a);
+    const externalUrl = externalUrlForAsset(a);
+    return (
     <div
       key={a.id}
-      className={`workbench-asset${selectedId === a.id ? ' workbench-asset--selected' : ''}`}
-      draggable
-      onDragStart={(e) => {
-        e.dataTransfer.setData('application/x-c0-media-asset', a.id);
-        e.dataTransfer.effectAllowed = 'move';
-      }}
+      className={`workbench-asset${selectedId === a.id ? ' workbench-asset--selected' : ''}${urlRef ? ' workbench-asset--url' : ''}`}
+      draggable={!urlRef}
+      onDragStart={urlRef ? undefined : (e) => setAssetDragData(e.dataTransfer, a.id)}
       onClick={() => onSelect?.(a.id)}
       role="button"
       tabIndex={0}
@@ -101,6 +106,10 @@ function MediaVisionBoard({
     >
       {thumbs[a.id] ? (
         <img src={thumbs[a.id]} alt="" className="workbench-asset-thumb" />
+      ) : urlRef ? (
+        <span className="workbench-asset-thumb workbench-asset-thumb--link" aria-hidden title={externalUrl || ''}>
+          ↗
+        </span>
       ) : (
         <span className="workbench-asset-thumb workbench-asset-thumb--placeholder" aria-hidden>
           ·
@@ -116,7 +125,62 @@ function MediaVisionBoard({
         ×
       </button>
     </div>
-  );
+    );
+  };
+
+  const submitReferenceUrl = async (visionId, slotKey) => {
+    const draftKey = `${visionId}-${slotKey}`;
+    const url = (referenceUrls[draftKey] || '').trim();
+    if (!url) return;
+    setReferenceSaving(draftKey);
+    onError?.('');
+    try {
+      await createReferenceFromUrl(visionId, url);
+      setReferenceUrls((prev) => {
+        const next = { ...prev };
+        delete next[draftKey];
+        return next;
+      });
+    } catch (err) {
+      onError?.(err?.response?.data?.detail || 'Could not add URL reference.');
+    } finally {
+      setReferenceSaving(null);
+    }
+  };
+
+  const renderReferenceUrlForm = (visionId, slotKey) => {
+    const draftKey = `${visionId}-${slotKey}`;
+    const saving = referenceSaving === draftKey;
+    return (
+      <form
+        className="workbench-reference-url-form"
+        onSubmit={(e) => {
+          e.preventDefault();
+          submitReferenceUrl(visionId, slotKey);
+        }}
+      >
+        <input
+          type="url"
+          className="workbench-reference-url-input"
+          placeholder="https://..."
+          value={referenceUrls[draftKey] || ''}
+          disabled={saving}
+          onChange={(e) =>
+            setReferenceUrls((prev) => ({ ...prev, [draftKey]: e.target.value }))
+          }
+          onClick={(e) => e.stopPropagation()}
+        />
+        <button
+          type="submit"
+          className="portal-btn portal-btn--small workbench-reference-url-add"
+          disabled={saving || !(referenceUrls[draftKey] || '').trim()}
+        >
+          {saving ? 'Adding…' : 'Add'}
+        </button>
+        <p className="workbench-vision-slot-empty">or drop a file</p>
+      </form>
+    );
+  };
 
   const renderDropSlot = (visionId, role, label, slotAsset, slotKey) => {
     const zoneId = `${visionId}-${role}-${slotKey}`;
@@ -130,7 +194,13 @@ function MediaVisionBoard({
         onDrop={(e) => onDropZone(e, visionId, role)}
       >
         <span className="workbench-vision-slot-label">{label}</span>
-        {slotAsset ? renderAssetCard(slotAsset) : <p className="workbench-vision-slot-empty">Drop here</p>}
+        {slotAsset ? (
+          renderAssetCard(slotAsset)
+        ) : role === 'reference' ? (
+          renderReferenceUrlForm(visionId, slotKey)
+        ) : (
+          <p className="workbench-vision-slot-empty">Drop here</p>
+        )}
       </div>
     );
   };
@@ -194,23 +264,42 @@ function MediaVisionBoard({
     );
   };
 
-  return (
-    <div className="portal-workbench-panel">
-      <header className="portal-workbench-header">
-        <h2 className="portal-workbench-title">Workbench</h2>
-        <button type="button" className="portal-btn portal-btn--small" onClick={handleCreateVision}>
-          + New vision
-        </button>
-      </header>
+  const boardBody = (
+    <>
       {error ? <div className="error-message">{error}</div> : null}
-
       {visions.length === 0 ? (
         <p className="workbench-board-empty">
-          Create a vision, then drag files from the left into wireframe, references, or media.
+          Create a vision, paste reference URLs or drag files into wireframe, references, and media.
         </p>
       ) : (
         visions.map(renderVisionCluster)
       )}
+    </>
+  );
+
+  if (embedded) {
+    return (
+      <div className="profile-vision-board-embedded">
+        <div className="profile-vision-board-toolbar">
+          <h3 className="profile-vision-board-label">Vision board</h3>
+          <button type="button" className="portal-btn portal-btn--small" onClick={handleCreateVision}>
+            + New vision
+          </button>
+        </div>
+        {boardBody}
+      </div>
+    );
+  }
+
+  return (
+    <div className="portal-workbench-panel media-vision-board">
+      <header className="portal-workbench-header">
+        <h2 className="portal-workbench-title">Vision board</h2>
+        <button type="button" className="portal-btn portal-btn--small" onClick={handleCreateVision}>
+          + New vision
+        </button>
+      </header>
+      {boardBody}
     </div>
   );
 }

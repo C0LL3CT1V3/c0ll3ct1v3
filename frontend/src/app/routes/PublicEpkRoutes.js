@@ -1,11 +1,13 @@
 import React from 'react';
 import { Route, Routes } from 'react-router-dom';
-import ArtistEpkPage from '../../pages/epk/ArtistEpkPage';
+import ArtistProfilePage from '../../features/profile/ArtistProfilePage';
+import BookerEpkPage from '../../features/profile/BookerEpkPage';
 
 function PublicEpkRoutes() {
   return (
     <Routes>
-      <Route path="*" element={<ArtistEpkPage />} />
+      <Route path="/epk" element={<BookerEpkPage />} />
+      <Route path="*" element={<ArtistProfilePage />} />
     </Routes>
   );
 }

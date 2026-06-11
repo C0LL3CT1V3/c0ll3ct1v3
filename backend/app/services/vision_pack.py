@@ -12,6 +12,7 @@ from ..models.media import MediaAsset, MediaVersion
 from ..models.vision import Vision
 from ..services.media_variants import best_image_variant, url_for_variant
 from ..services.spaces_storage import get_s3_client, presigned_get_object
+from ..services.url_reference import external_url_from_asset
 
 VISION_ROLES = frozenset({"wireframe", "reference", "media"})
 ROLE_LIMITS: dict[str, int] = {"wireframe": 1, "reference": 3}
@@ -26,6 +27,9 @@ def vision_role_from_tags(tags: dict | None) -> str:
 
 
 def _preview_url_for_asset(db: Session, asset: MediaAsset) -> str | None:
+    external = external_url_from_asset(asset)
+    if external:
+        return external
     ver = (
         db.query(MediaVersion)
         .options(joinedload(MediaVersion.variants))
@@ -96,6 +100,32 @@ def validate_vision_role_assignment(
             detail=f"Vision already has the maximum number of {role} assets ({limit}).",
         )
     return role
+
+
+def apply_folder_assignment(
+    db: Session,
+    asset: MediaAsset,
+    *,
+    vision_id: str | None,
+) -> None:
+    """Assign asset to a Vault folder (vision) without wireframe/reference/media roles."""
+    if vision_id is None:
+        asset.vision_id = None
+        tags = dict(asset.tags or {})
+        tags.pop("vision_role", None)
+        asset.tags = tags
+        return
+    vision = (
+        db.query(Vision)
+        .filter(Vision.id == vision_id, Vision.tenant_slug == asset.tenant_slug)
+        .first()
+    )
+    if not vision:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Vision not found.")
+    asset.vision_id = vision_id
+    tags = dict(asset.tags or {})
+    tags.pop("vision_role", None)
+    asset.tags = tags
 
 
 def apply_vision_assignment(

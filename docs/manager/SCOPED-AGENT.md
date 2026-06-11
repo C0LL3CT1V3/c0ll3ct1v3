@@ -57,12 +57,19 @@ Each vision group has three partitions (via `MediaAsset.tags.vision_role`):
 
 API: `GET /media/visions/{id}/pack`
 
+## EPK readiness (booker checklist)
+
+`GET /manager/epk/completeness` and `EpkDraftOut.completeness` score the artist against press-kit essentials (music, bio, photos, video, contact, social) plus credibility/practical items (quotes, shows, rider, set lengths).
+
+The manager agent receives gap summaries in `build_agent_context_block` and should suggest concrete next steps — uploads, copy, or spec changes — without inventing quotes or draw numbers.
+
 ## EPK build loop (html_v1)
 
 ```
 Artist spec + vision pack
   → POST /manager/epk/build-from-vision (or chat tool build_epk_from_vision)
-  → generate HTML/CSS (OpenRouter)
+  → vision model reads reference images → Google Fonts palette
+  → generate HTML/CSS (OpenRouter) using detected fonts
   → GET /manager/epk/sim/render?token=… (sandboxed iframe + Playwright)
   → vision critique (optional one revise, max EPK_BUILD_MAX_REVISIONS cycles)
   → artist reviews interactive sim
@@ -75,6 +82,18 @@ Draft format stored in `artist.epk_draft`:
 ```
 
 Enable Playwright screenshots: `EPK_PLAYWRIGHT_ENABLED=true` and `playwright install chromium` in the backend container.
+
+## Design history
+
+Each build or chat-driven patch creates an `EpkIteration` row with `design_after` (full draft snapshot), optional screenshot, and critique metadata.
+
+| Endpoint | Purpose |
+|----------|---------|
+| `GET /manager/epk/iterations` | List proposed designs (newest first) |
+| `GET /manager/epk/iterations/{id}` | Preview a past design (iteration-scoped sim URL) |
+| `POST /manager/epk/iterations/{id}/restore` | Set a past design as the current `artist.epk_draft` |
+
+Historical `html_v1` previews use sim tokens bound to `iteration_id`, so they keep working after newer builds overwrite the live draft.
 
 ## Flow
 

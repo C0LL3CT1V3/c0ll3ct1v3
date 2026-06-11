@@ -12,14 +12,23 @@ from ..config import settings
 from ..models.artist import Artist
 from ..models.manager import EpkIteration, ManagerMessage, ManagerThread
 from ..models.media import MediaAsset, MediaVersion
+from ..services.epk_completeness import completeness_context_block, evaluate_epk_completeness
 from ..services.epk_component_registry import get_component_map, resolve_annotations
 from ..services.epk_draft import get_or_init_draft
+from ..services.epk_html_draft import (
+    draft_content_hash,
+    is_html_draft,
+    normalize_html_draft,
+    resolve_binding_urls,
+)
+from ..services.epk_sim_token import sim_render_url
 from ..services.epk_patch import apply_design_patch, site_from_draft_and_config as build_site
 from ..services.manager_agent import ManagerTurnResult, run_manager_turn
 from ..services.manager_llm import (
     build_system_prompt,
     generate_epk_patch,
     refine_epk_from_annotations,
+    refine_epk_html_from_annotations,
 )
 from ..services.media_variants import best_image_variant, url_for_variant
 from ..services.spaces_storage import get_s3_client, presigned_get_object, presigned_put_object
@@ -39,6 +48,118 @@ def _screenshot_presign(tenant_slug: str, iteration_id: str) -> tuple[str | None
         return url, key
     except RuntimeError:
         return None, None
+
+
+def _screenshot_get_url(storage_key: str | None) -> str | None:
+    if not settings.spaces_enabled or not storage_key:
+        return None
+    try:
+        client = get_s3_client()
+        return presigned_get_object(client, storage_key)
+    except RuntimeError:
+        return None
+
+
+def _iteration_format(row: EpkIteration) -> str:
+    ctx = row.context_snapshot if isinstance(row.context_snapshot, dict) else {}
+    design = row.design_after if isinstance(row.design_after, dict) else {}
+    if ctx.get("format") == "html_v1" or design.get("format") == "html_v1":
+        return "html_v1"
+    return "layout"
+
+
+def _get_iteration_row(db: Session, artist: Artist, iteration_id: str) -> EpkIteration:
+    row = (
+        db.query(EpkIteration)
+        .filter(EpkIteration.id == iteration_id, EpkIteration.artist_id == artist.id)
+        .first()
+    )
+    if not row:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Iteration not found.")
+    return row
+
+
+def _iteration_summary(row: EpkIteration, artist: Artist) -> dict[str, Any]:
+    ctx = row.context_snapshot if isinstance(row.context_snapshot, dict) else {}
+    design = row.design_after if isinstance(row.design_after, dict) else {}
+    fmt = _iteration_format(row)
+    is_seed = row.step == "generate" and not row.parent_iteration_id
+    return {
+        "id": row.id,
+        "step": row.step,
+        "format": fmt,
+        "is_seed": is_seed,
+        "user_prompt": row.user_prompt,
+        "reasoning_summary": row.reasoning_summary,
+        "vision_id": design.get("vision_id") or ctx.get("vision_pack", {}).get("vision_id"),
+        "spec_snapshot": design.get("spec_snapshot") or ctx.get("spec"),
+        "match_score": ctx.get("critique", {}).get("match_score"),
+        "revision_cycles": ctx.get("revision_cycles"),
+        "artist_accepted": row.artist_accepted,
+        "parent_iteration_id": row.parent_iteration_id,
+        "screenshot_url": _screenshot_get_url(row.screenshot_storage_key),
+        "created_at": row.created_at,
+    }
+
+
+def build_iteration_preview(db: Session, artist: Artist, row: EpkIteration) -> dict[str, Any]:
+    design = row.design_after if isinstance(row.design_after, dict) else {}
+    fmt = _iteration_format(row)
+    summary = _iteration_summary(row, artist)
+    if fmt == "html_v1" and design:
+        draft_hash = draft_content_hash(design)
+        return {
+            **summary,
+            "format": "html_v1",
+            "html": design.get("html"),
+            "css": design.get("css"),
+            "asset_bindings": design.get("asset_bindings") or {},
+            "vision_id": design.get("vision_id"),
+            "spec_snapshot": design.get("spec_snapshot"),
+            "font_palette": design.get("font_palette"),
+            "google_fonts_href": design.get("google_fonts_href"),
+            "sim_render_url": sim_render_url(
+                artist_id=artist.id,
+                draft_hash=draft_hash,
+                iteration_id=row.id,
+            ),
+            "design": {},
+            "site": {},
+            "tracks": [],
+            "photos": [],
+        }
+    preview = build_preview_payload(db, artist, design or get_or_init_draft(artist))
+    return {
+        **summary,
+        "format": "layout",
+        **preview,
+        "sim_render_url": None,
+    }
+
+
+def list_epk_iterations(db: Session, artist: Artist, *, limit: int = 40) -> list[dict[str, Any]]:
+    rows = (
+        db.query(EpkIteration)
+        .filter(EpkIteration.artist_id == artist.id)
+        .order_by(EpkIteration.created_at.desc(), EpkIteration.id.desc())
+        .limit(max(1, min(limit, 100)))
+        .all()
+    )
+    return [_iteration_summary(row, artist) for row in rows]
+
+
+def get_epk_iteration_preview(db: Session, artist: Artist, iteration_id: str) -> dict[str, Any]:
+    row = _get_iteration_row(db, artist, iteration_id)
+    return build_iteration_preview(db, artist, row)
+
+
+def restore_epk_iteration(db: Session, artist: Artist, iteration_id: str) -> dict[str, Any]:
+    row = _get_iteration_row(db, artist, iteration_id)
+    design = row.design_after
+    if not isinstance(design, dict) or not design:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Iteration has no saved design.")
+    save_draft(db, artist, design)
+    return build_iteration_preview(db, artist, row)
 
 
 def get_or_create_thread(
@@ -269,6 +390,8 @@ def build_agent_context_block(db: Session, artist: Artist) -> str:
     tagline = (artist.epk_config or {}).get("tagline")
     if tagline:
         lines.append(f"Published tagline: {tagline}")
+    lines.append("")
+    lines.append(completeness_context_block(db, artist))
     return "\n".join(lines)
 
 
@@ -432,7 +555,18 @@ def annotate_iteration(
 
     design = iteration.design_after or get_or_init_draft(artist)
     raw = [a if isinstance(a, dict) else a.model_dump() for a in annotations]
-    resolved = resolve_annotations(design, raw)
+    if is_html_draft(design):
+        resolved = [
+            {
+                "note": str(a.get("note") or "").strip(),
+                "bbox_norm": a.get("bbox_norm"),
+                "component_ids": a.get("component_ids") or [],
+            }
+            for a in raw
+            if str(a.get("note") or "").strip()
+        ]
+    else:
+        resolved = resolve_annotations(design, raw)
 
     iteration.annotations_raw = raw
     iteration.annotations_resolved = resolved
@@ -455,15 +589,40 @@ def refine_iteration(db: Session, artist: Artist, parent: EpkIteration) -> tuple
         artist.manager_system_prompt,
         prompt_role="patch",
     )
-    result = refine_epk_from_annotations(
-        system,
-        draft_before,
-        parent.user_prompt,
-        parent.annotations_resolved,
-    )
 
-    patch = result.get("patch") or {}
-    design_after = apply_design_patch(draft_before, patch)
+    if is_html_draft(draft_before):
+        bindings = draft_before.get("asset_bindings") or {}
+        asset_urls = resolve_binding_urls(db, artist.tenant_slug, bindings)
+        result = refine_epk_html_from_annotations(
+            system,
+            html=draft_before.get("html") or "",
+            css=draft_before.get("css") or "",
+            asset_bindings=bindings,
+            asset_urls=asset_urls,
+            original_prompt=parent.user_prompt
+            or (parent.context_snapshot if isinstance(parent.context_snapshot, dict) else {}).get("spec", ""),
+            resolved_annotations=parent.annotations_resolved or [],
+        )
+        design_after = normalize_html_draft(
+            html=result.get("html") or draft_before.get("html") or "",
+            css=result.get("css") or draft_before.get("css") or "",
+            asset_bindings=result.get("asset_bindings") or bindings,
+            vision_id=draft_before.get("vision_id"),
+            spec_snapshot=draft_before.get("spec_snapshot"),
+            font_palette=draft_before.get("font_palette"),
+            google_fonts_href=draft_before.get("google_fonts_href"),
+        )
+        patch = {"format": "html_v1"}
+    else:
+        result = refine_epk_from_annotations(
+            system,
+            draft_before,
+            parent.user_prompt,
+            parent.annotations_resolved,
+        )
+        patch = result.get("patch") or {}
+        design_after = apply_design_patch(draft_before, patch)
+
     save_draft(db, artist, design_after)
 
     child = EpkIteration(
@@ -501,7 +660,7 @@ def refine_iteration(db: Session, artist: Artist, parent: EpkIteration) -> tuple
                 metadata={"iteration_id": child.id, "type": "epk_refine"},
             )
 
-    preview = build_preview_payload(db, artist, design_after)
+    preview = build_iteration_preview(db, artist, child)
     return child, preview, upload_url, storage_key
 
 
@@ -547,6 +706,25 @@ def publish_draft(db: Session, artist: Artist) -> dict:
         cfg["booking_email"] = contact["email"]
 
     cfg["epk_design"] = {k: v for k, v in design.items() if k != "_site_patch"}
+    if is_html_draft(design):
+        cfg["profile_page"] = {
+            k: design[k]
+            for k in (
+                "format",
+                "html",
+                "css",
+                "asset_bindings",
+                "font_palette",
+                "google_fonts_href",
+                "vision_id",
+                "spec_snapshot",
+            )
+            if k in design
+        }
+    cfg["profile_published"] = True
+    from datetime import datetime, timezone
+
+    cfg["profile_published_at"] = datetime.now(timezone.utc).isoformat()
     artist.epk_config = cfg
     db.commit()
     return cfg

@@ -12,3 +12,5 @@ Respond ONLY with valid JSON:
 }
 
 Set should_revise true only when major_gaps would confuse a booker (missing hero, wrong section order, unreadable text). Do not revise for minor styling differences.
+
+Note typography mismatches (wrong font mood, illegible pairing) in `minor_gaps` when a `font_palette` was supplied.

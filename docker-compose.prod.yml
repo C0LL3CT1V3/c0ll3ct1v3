@@ -34,8 +34,8 @@ services:
 
   frontend:
     build:
-      context: .
-      dockerfile: ./frontend/Dockerfile.prod
+      context: ./frontend
+      dockerfile: Dockerfile.prod
       args:
         - REACT_APP_API_URL=${REACT_APP_API_URL:-/api}
         - REACT_APP_AUTH0_DOMAIN=${REACT_APP_AUTH0_DOMAIN}

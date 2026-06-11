@@ -16,8 +16,12 @@ from ...schemas.manager_schemas import (
     EpkAnnotateBody,
     EpkBuildFromVisionBody,
     EpkBuildFromVisionOut,
+    EpkCompletenessOut,
     EpkComponentMapOut,
+    EpkCustomHtmlBody,
     EpkDraftOut,
+    EpkIterationDetailOut,
+    EpkIterationListOut,
     EpkIterateBody,
     EpkIterateOut,
     EpkPublishOut,
@@ -32,9 +36,10 @@ from ...schemas.manager_schemas import (
 )
 from ...services.manager_llm import effective_manager_provider, manager_llm_configured, resolved_manager_model
 from ...services.manager_rate_limit import enforce_manager_chat_rate_limit
-from ...services.epk_html_draft import draft_content_hash, is_html_draft
-from ...services.epk_sim_token import mint_sim_token, verify_sim_token
+from ...services.epk_html_draft import draft_content_hash, is_html_draft, normalize_html_draft
+from ...services.epk_sim_token import sim_render_url, verify_sim_token
 from ...services.epk_build_loop import build_epk_from_vision
+from ...services.epk_completeness import evaluate_epk_completeness
 from ...services.epk_component_registry import get_component_map
 from ...services.epk_draft import get_or_init_draft
 from ...services.manager_epk_service import (
@@ -43,9 +48,13 @@ from ...services.manager_epk_service import (
     build_preview_payload,
     chat_with_history,
     export_training_jsonl,
+    get_epk_iteration_preview,
     get_or_create_thread,
     iterate_epk,
+    list_epk_iterations,
     list_thread_messages,
+    restore_epk_iteration,
+    save_draft,
     publish_draft,
     refine_iteration,
 )
@@ -131,19 +140,27 @@ def manager_chat(
     )
 
 
+@router.get("/epk/completeness", response_model=EpkCompletenessOut)
+def epk_completeness(
+    db: Session = Depends(get_db),
+    artist: Artist = Depends(get_manager_artist),
+) -> EpkCompletenessOut:
+    return EpkCompletenessOut(**evaluate_epk_completeness(db, artist))
+
+
 @router.get("/epk/draft", response_model=EpkDraftOut)
 def get_epk_draft(
     db: Session = Depends(get_db),
     artist: Artist = Depends(get_manager_artist),
 ) -> EpkDraftOut:
     design = get_or_init_draft(artist)
+    completeness = evaluate_epk_completeness(db, artist)
     if not artist.epk_draft:
         artist.epk_draft = design
         db.commit()
     if is_html_draft(design):
         draft_hash = draft_content_hash(design)
-        token = mint_sim_token(artist_id=artist.id, draft_hash=draft_hash)
-        sim_url = f"{settings.epk_sim_base_url.rstrip('/')}/manager/epk/sim/render?token={token}"
+        sim_url = sim_render_url(artist_id=artist.id, draft_hash=draft_hash)
         return EpkDraftOut(
             format="html_v1",
             html=design.get("html"),
@@ -152,9 +169,46 @@ def get_epk_draft(
             vision_id=design.get("vision_id"),
             spec_snapshot=design.get("spec_snapshot"),
             sim_render_url=sim_url,
+            font_palette=design.get("font_palette"),
+            google_fonts_href=design.get("google_fonts_href"),
+            completeness=completeness,
         )
     payload = build_preview_payload(db, artist, design)
-    return EpkDraftOut(format="layout", **payload)
+    return EpkDraftOut(format="layout", completeness=completeness, **payload)
+
+
+@router.post("/epk/draft/custom", response_model=EpkDraftOut)
+def epk_save_custom_html(
+    body: EpkCustomHtmlBody,
+    db: Session = Depends(get_db),
+    artist: Artist = Depends(get_manager_artist),
+) -> EpkDraftOut:
+    existing = artist.epk_draft if isinstance(artist.epk_draft, dict) else {}
+    draft = normalize_html_draft(
+        html=body.html,
+        css=body.css,
+        asset_bindings=body.asset_bindings or existing.get("asset_bindings") or {},
+        vision_id=existing.get("vision_id"),
+        spec_snapshot=existing.get("spec_snapshot") or "Custom HTML/CSS",
+        font_palette=existing.get("font_palette"),
+        google_fonts_href=body.google_fonts_href or existing.get("google_fonts_href"),
+    )
+    save_draft(db, artist, draft)
+    completeness = evaluate_epk_completeness(db, artist)
+    draft_hash = draft_content_hash(draft)
+    sim_url = sim_render_url(artist_id=artist.id, draft_hash=draft_hash)
+    return EpkDraftOut(
+        format="html_v1",
+        html=draft.get("html"),
+        css=draft.get("css"),
+        asset_bindings=draft.get("asset_bindings") or {},
+        vision_id=draft.get("vision_id"),
+        spec_snapshot=draft.get("spec_snapshot"),
+        sim_render_url=sim_url,
+        font_palette=draft.get("font_palette"),
+        google_fonts_href=draft.get("google_fonts_href"),
+        completeness=completeness,
+    )
 
 
 @router.get("/epk/sim/render", response_class=HTMLResponse)
@@ -166,15 +220,58 @@ def epk_sim_render(
 
     info = verify_sim_token(token)
     artist = db.query(Artist).filter(Artist.id == info["artist_id"]).first()
-    if not artist or not isinstance(artist.epk_draft, dict):
+    if not artist:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Draft not found.")
-    draft = artist.epk_draft
+    iteration_id = info.get("iteration_id")
+    if iteration_id:
+        iteration = (
+            db.query(EpkIteration)
+            .filter(EpkIteration.id == iteration_id, EpkIteration.artist_id == artist.id)
+            .first()
+        )
+        if not iteration or not isinstance(iteration.design_after, dict):
+            raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Iteration draft not found.")
+        draft = iteration.design_after
+    elif isinstance(artist.epk_draft, dict):
+        draft = artist.epk_draft
+    else:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Draft not found.")
     if not is_html_draft(draft):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Not an html_v1 draft.")
     if draft_content_hash(draft) != info["draft_hash"]:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail="Draft hash mismatch.")
     html = render_draft_html(db, artist, draft)
     return HTMLResponse(content=html, headers={"Cache-Control": "no-store"})
+
+
+@router.get("/epk/iterations", response_model=EpkIterationListOut)
+def epk_list_iterations(
+    limit: int = 40,
+    db: Session = Depends(get_db),
+    artist: Artist = Depends(get_manager_artist),
+) -> EpkIterationListOut:
+    rows = list_epk_iterations(db, artist, limit=limit)
+    return EpkIterationListOut(iterations=rows)
+
+
+@router.get("/epk/iterations/{iteration_id}", response_model=EpkIterationDetailOut)
+def epk_get_iteration(
+    iteration_id: str,
+    db: Session = Depends(get_db),
+    artist: Artist = Depends(get_manager_artist),
+) -> EpkIterationDetailOut:
+    preview = get_epk_iteration_preview(db, artist, iteration_id)
+    return EpkIterationDetailOut(**preview)
+
+
+@router.post("/epk/iterations/{iteration_id}/restore", response_model=EpkIterationDetailOut)
+def epk_restore_iteration(
+    iteration_id: str,
+    db: Session = Depends(get_db),
+    artist: Artist = Depends(get_manager_artist),
+) -> EpkIterationDetailOut:
+    preview = restore_epk_iteration(db, artist, iteration_id)
+    return EpkIterationDetailOut(**preview)
 
 
 @router.post("/epk/build-from-vision", response_model=EpkBuildFromVisionOut)
@@ -255,10 +352,15 @@ def epk_refine(
         iteration_id=child.id,
         parent_iteration_id=parent.id,
         reasoning_summary=child.reasoning_summary,
-        design=preview["design"],
-        site=preview["site"],
-        tracks=preview["tracks"],
-        photos=preview["photos"],
+        format=preview.get("format") or "layout",
+        design=preview.get("design") or {},
+        site=preview.get("site") or {},
+        tracks=preview.get("tracks") or [],
+        photos=preview.get("photos") or [],
+        html=preview.get("html"),
+        css=preview.get("css"),
+        asset_bindings=preview.get("asset_bindings") or {},
+        sim_render_url=preview.get("sim_render_url"),
         annotations_resolved=child.annotations_resolved or [],
         screenshot_upload_url=upload_url,
         screenshot_storage_key=storage_key,

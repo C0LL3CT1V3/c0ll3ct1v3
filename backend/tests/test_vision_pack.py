@@ -8,7 +8,9 @@ from sqlalchemy.orm import sessionmaker
 from app.database import Base
 from app.models.media import MediaAsset
 from app.models.vision import Vision
+from app.services.url_reference import create_url_reference_asset
 from app.services.vision_pack import (
+    apply_folder_assignment,
     apply_vision_assignment,
     get_vision_pack,
     validate_vision_role_assignment,
@@ -101,6 +103,37 @@ def test_get_vision_pack_partitions(db):
     assert len(pack["references"]) == 1
     assert len(pack["media"]) == 1
     assert pack["counts"]["media"] == 1
+
+
+def test_apply_folder_assignment_no_role(db):
+    session, vision = db
+    asset = MediaAsset(
+        id="folder1",
+        tenant_slug="test",
+        title="track",
+        asset_type="audio",
+        status="ready",
+        storage_region="workbench",
+    )
+    session.add(asset)
+    session.commit()
+    apply_folder_assignment(session, asset, vision_id=vision.id)
+    assert asset.vision_id == vision.id
+    assert "vision_role" not in (asset.tags or {})
+
+
+def test_url_reference_in_vision_pack(db):
+    session, vision = db
+    asset = create_url_reference_asset(
+        session,
+        tenant_slug="test",
+        vision_id=vision.id,
+        url="https://example.com/ref.png",
+    )
+    pack = get_vision_pack(session, vision.id, "test")
+    assert len(pack["references"]) == 1
+    assert pack["references"][0]["id"] == asset.id
+    assert pack["references"][0]["preview_url"] == "https://example.com/ref.png"
 
 
 def test_apply_vision_assignment_clears_on_null(db):

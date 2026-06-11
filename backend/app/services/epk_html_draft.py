@@ -9,6 +9,7 @@ from typing import Any
 from fastapi import HTTPException, status
 
 from ..config import settings
+from .epk_font_analysis import build_google_fonts_href, normalize_font_palette, sanitize_google_fonts_href
 
 HTML_FORMAT = "html_v1"
 MAX_HTML_BYTES = 512_000
@@ -25,7 +26,10 @@ def is_html_draft(draft: dict | None) -> bool:
 
 
 def draft_content_hash(draft: dict) -> str:
-    payload = f"{draft.get('html','')}|{draft.get('css','')}|{draft.get('asset_bindings',{})}"
+    payload = (
+        f"{draft.get('html','')}|{draft.get('css','')}|{draft.get('asset_bindings',{})}"
+        f"|{draft.get('google_fonts_href','')}|{draft.get('font_palette',{})}"
+    )
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:32]
 
 
@@ -59,16 +63,28 @@ def inject_asset_bindings(html: str, url_map: dict[str, str]) -> str:
     return out
 
 
-def build_render_document(*, html: str, css: str, title: str = "EPK Preview") -> str:
+def build_render_document(
+    *,
+    html: str,
+    css: str,
+    title: str = "EPK Preview",
+    google_fonts_href: str | None = None,
+) -> str:
     safe_html = sanitize_html_fragment(html)
     safe_css = sanitize_css(css)
+    fonts_link = ""
+    safe_href = sanitize_google_fonts_href(google_fonts_href)
+    if safe_href:
+        fonts_link = (
+            f'  <link rel="stylesheet" href="{safe_href}" crossorigin="anonymous" />\n'
+        )
     return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>{title}</title>
-  <style>{safe_css}</style>
+{fonts_link}  <style>{safe_css}</style>
 </head>
 <body>
 {safe_html}
@@ -83,8 +99,14 @@ def normalize_html_draft(
     asset_bindings: dict[str, str] | None = None,
     vision_id: str | None = None,
     spec_snapshot: str | None = None,
+    font_palette: dict[str, Any] | None = None,
+    google_fonts_href: str | None = None,
 ) -> dict[str, Any]:
-    return {
+    palette = normalize_font_palette(font_palette) if font_palette else None
+    href = sanitize_google_fonts_href(google_fonts_href) or (
+        build_google_fonts_href(palette) if palette else None
+    )
+    out: dict[str, Any] = {
         "format": HTML_FORMAT,
         "html": sanitize_html_fragment(html),
         "css": sanitize_css(css),
@@ -92,6 +114,11 @@ def normalize_html_draft(
         "vision_id": vision_id,
         "spec_snapshot": (spec_snapshot or "")[:8000],
     }
+    if palette:
+        out["font_palette"] = palette
+    if href:
+        out["google_fonts_href"] = href
+    return out
 
 
 def resolve_binding_urls(db, tenant_slug: str, bindings: dict[str, str]) -> dict[str, str]:
@@ -124,4 +151,9 @@ def render_draft_html(db, artist, draft: dict) -> str:
     html = inject_asset_bindings(draft.get("html") or "", url_map)
     css = draft.get("css") or ""
     title = artist.display_name or "EPK Preview"
-    return build_render_document(html=html, css=css, title=title)
+    return build_render_document(
+        html=html,
+        css=css,
+        title=title,
+        google_fonts_href=draft.get("google_fonts_href"),
+    )

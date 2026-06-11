@@ -50,10 +50,10 @@ function MarketingLanding() {
   return (
     <MarketingLayout>
       <section className="marketing-hero">
-        <h1>Your music career, one stack you own.</h1>
+        <h1>MySpace for musicians — but you own it.</h1>
         <p className="marketing-lead">
-          c0ll3ct1v3 gives independent artists a minimal studio: AI manager, media library, and a
-          public EPK at your own subdomain.
+          c0ll3ct1v3 is your musician page studio: customize your look, embed your tracks, stack your
+          photos, and go live at <code>you.c0ll3ct1v3.xyz</code> with an AI manager helping you build it.
         </p>
         <div className="marketing-actions">
           <button type="button" className="portal-btn portal-btn--primary" onClick={() => startLogin()}>

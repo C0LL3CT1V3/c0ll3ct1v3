@@ -18,13 +18,13 @@ ENV REACT_APP_AUTH0_SCOPE=$REACT_APP_AUTH0_SCOPE
 ENV REACT_APP_AUTH0_MFA_ACR=$REACT_APP_AUTH0_MFA_ACR
 
 # Copy package files
-COPY frontend/package*.json ./
+COPY package*.json ./
 
 # Install dependencies
-RUN npm ci --only=production
+RUN npm ci
 
 # Copy source code
-COPY frontend/ .
+COPY . .
 
 # Build the React app
 RUN npm run build
@@ -32,8 +32,8 @@ RUN npm run build
 # Production stage
 FROM nginx:alpine
 
-# Copy custom nginx config
-COPY infrastructure/nginx.prod.conf /etc/nginx/nginx.conf
+# Copy custom nginx config (keep in sync with infrastructure/nginx.prod.conf)
+COPY nginx.prod.conf /etc/nginx/nginx.conf
 
 # Copy built app from builder stage
 COPY --from=builder /app/build /usr/share/nginx/html

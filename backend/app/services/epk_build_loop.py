@@ -15,8 +15,10 @@ from ..services.epk_html_draft import (
     draft_content_hash,
     normalize_html_draft,
 )
+from ..services.epk_completeness import evaluate_epk_completeness
+from ..services.epk_font_analysis import detect_fonts_from_vision_pack
 from ..services.epk_playwright import capture_sim_screenshot
-from ..services.epk_sim_token import mint_sim_token
+from ..services.epk_sim_token import sim_render_url
 from ..services.manager_epk_service import (
     _screenshot_presign,
     append_message,
@@ -44,11 +46,6 @@ def _upload_screenshot(tenant_slug: str, iteration_id: str, png: bytes) -> str |
         return None
 
 
-def _sim_url_for_draft(artist: Artist, draft: dict) -> str:
-    token = mint_sim_token(artist_id=artist.id, draft_hash=draft_content_hash(draft))
-    return f"{settings.epk_sim_base_url.rstrip('/')}/manager/epk/sim/render?token={token}"
-
-
 def build_epk_from_vision(
     db: Session,
     artist: Artist,
@@ -58,6 +55,15 @@ def build_epk_from_vision(
     spec: str,
 ) -> dict[str, Any]:
     pack = get_vision_pack(db, vision_id, artist.tenant_slug)
+    font_palette = detect_fonts_from_vision_pack(pack)
+    epk_readiness = evaluate_epk_completeness(db, artist)
+    pack["font_palette"] = font_palette
+    pack["epk_readiness"] = {
+        "required_score": epk_readiness.get("required_score"),
+        "summary": epk_readiness.get("summary"),
+        "gaps": epk_readiness.get("gaps"),
+        "inventory": epk_readiness.get("inventory"),
+    }
     thread.vision_id = vision_id
     db.commit()
 
@@ -86,6 +92,7 @@ def build_epk_from_vision(
             vision_pack=pack,
             artist_name=artist.display_name,
             critique_notes=critique_notes,
+            font_palette=font_palette,
         )
         draft = normalize_html_draft(
             html=generated.get("html") or "",
@@ -93,11 +100,12 @@ def build_epk_from_vision(
             asset_bindings=generated.get("asset_bindings") or {},
             vision_id=vision_id,
             spec_snapshot=spec,
+            font_palette=font_palette,
         )
         save_draft(db, artist, draft)
         reasoning_summary = generated.get("reasoning_summary") or "Built EPK preview."
 
-        sim_url = _sim_url_for_draft(artist, draft)
+        sim_url = sim_render_url(artist_id=artist.id, draft_hash=draft_content_hash(draft))
         screenshot_png = capture_sim_screenshot(sim_url)
         last_critique = critique_epk_screenshot(
             spec=spec,
@@ -125,6 +133,7 @@ def build_epk_from_vision(
         user_prompt=spec,
         context_snapshot={
             "vision_pack": pack,
+            "font_palette": font_palette,
             "spec": spec,
             "critique": last_critique,
             "revision_cycles": cycles_run,
@@ -146,7 +155,11 @@ def build_epk_from_vision(
             iteration.screenshot_storage_key = screenshot_key
             db.commit()
 
-    sim_render_url = _sim_url_for_draft(artist, draft)
+    render_url = sim_render_url(
+        artist_id=artist.id,
+        draft_hash=draft_content_hash(draft),
+        iteration_id=iteration.id,
+    )
     append_message(db, thread, "user", spec, metadata={"type": "epk_build", "vision_id": vision_id})
     assistant_text = reasoning_summary
     if last_critique.get("critique_summary"):
@@ -177,7 +190,9 @@ def build_epk_from_vision(
         "asset_bindings": draft.get("asset_bindings") or {},
         "vision_id": vision_id,
         "spec_snapshot": spec,
-        "sim_render_url": sim_render_url,
+        "font_palette": font_palette,
+        "google_fonts_href": draft.get("google_fonts_href"),
+        "sim_render_url": render_url,
         "screenshot_storage_key": screenshot_key,
         "design": {},
         "site": {},

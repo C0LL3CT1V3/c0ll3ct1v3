@@ -419,6 +419,43 @@ def generate_epk_patch(
     return _stub_epk_patch(user_prompt, draft)
 
 
+def refine_epk_html_from_annotations(
+    system_prompt: str,
+    *,
+    html: str,
+    css: str,
+    asset_bindings: dict[str, str],
+    asset_urls: dict[str, str],
+    original_prompt: str,
+    resolved_annotations: list[dict],
+) -> dict[str, Any]:
+    user = (
+        f"Original design spec: {original_prompt}\n\n"
+        f"Current HTML:\n{html}\n\n"
+        f"Current CSS:\n{css}\n\n"
+        f"Asset bindings (placeholder key → asset id):\n{json.dumps(asset_bindings, indent=2)}\n\n"
+        f"Resolvable media URLs for bindings:\n{json.dumps(asset_urls, indent=2)}\n\n"
+        f"Artist annotations (bbox_norm is 0–1 relative to preview viewport):\n"
+        f"{json.dumps(resolved_annotations, indent=2)}\n\n"
+        "Apply the annotated feedback to the HTML/CSS. Keep existing asset binding keys where possible. "
+        "Return JSON with reasoning_summary, html, css, asset_bindings."
+    )
+    parsed = _call_llm_json_any(
+        system_prompt + "\n\nYou refine html_v1 musician profile pages from region annotations.",
+        user,
+        json_mode=True,
+        max_tokens=4000,
+    )
+    if parsed.get("html"):
+        return parsed
+    return {
+        "reasoning_summary": "Applied annotation feedback (stub mode).",
+        "html": html,
+        "css": css,
+        "asset_bindings": asset_bindings,
+    }
+
+
 def refine_epk_from_annotations(
     system_prompt: str,
     draft: dict,
@@ -437,7 +474,18 @@ def refine_epk_from_annotations(
     return _stub_epk_patch(original_prompt, draft, refine=True)
 
 
-def _stub_epk_html(spec: str, pack: dict, artist_name: str) -> dict[str, Any]:
+def _stub_epk_html(
+    spec: str,
+    pack: dict,
+    artist_name: str,
+    font_palette: dict | None = None,
+) -> dict[str, Any]:
+    from .epk_font_analysis import css_font_stack, stub_font_palette
+
+    palette = font_palette if isinstance(font_palette, dict) else stub_font_palette()
+    stacks = css_font_stack(palette)
+    heading_stack = stacks.get("heading", "Georgia, serif")
+    body_stack = stacks.get("body", "system-ui, sans-serif")
     media = pack.get("media") or []
     bindings: dict[str, str] = {}
     if media:
@@ -454,9 +502,9 @@ def _stub_epk_html(spec: str, pack: dict, artist_name: str) -> dict[str, Any]:
         + "</section></main>"
     )
     css = (
-        "body { font-family: Georgia, serif; margin: 0; background: #faf9f6; color: #1a1a1a; }"
+        f"body {{ font-family: {body_stack}; margin: 0; background: #faf9f6; color: #1a1a1a; }}"
         ".epk { max-width: 960px; margin: 0 auto; padding: 2rem; }"
-        "header h1 { font-size: 2.5rem; margin-bottom: 0.5rem; }"
+        f"header h1 {{ font-family: {heading_stack}; font-size: 2.5rem; margin-bottom: 0.5rem; }}"
         ".photos img { width: 100%; border-radius: 8px; }"
     )
     return {
@@ -474,19 +522,32 @@ def generate_epk_html(
     vision_pack: dict,
     artist_name: str = "Artist",
     critique_notes: str | None = None,
+    font_palette: dict | None = None,
 ) -> dict[str, Any]:
+    from .epk_font_analysis import css_font_stack
+
     template = load_epk_html_generate_template()
+    stacks = css_font_stack(font_palette)
     user = (
         f"Artist spec:\n{spec}\n\n"
         f"Vision pack:\n{json.dumps(vision_pack, indent=2)}\n\n"
     )
+    if font_palette:
+        user += (
+            f"Font palette (from reference images — use in CSS font-family):\n"
+            f"{json.dumps(font_palette, indent=2)}\n\n"
+            f"Suggested stacks:\n{json.dumps(stacks, indent=2)}\n\n"
+        )
+    readiness = vision_pack.get("epk_readiness")
+    if readiness:
+        user += f"EPK readiness (booker checklist — enforce in layout/copy):\n{json.dumps(readiness, indent=2)}\n\n"
     if critique_notes:
         user += f"Revision notes from vision critique:\n{critique_notes}\n\n"
     user += "Return JSON with reasoning_summary, html, css, asset_bindings."
     parsed = _call_llm_json_any(f"{system_prompt}\n\n{template}", user, json_mode=True, max_tokens=4000)
     if parsed.get("html"):
         return parsed
-    return _stub_epk_html(spec, vision_pack, artist_name)
+    return _stub_epk_html(spec, vision_pack, artist_name, font_palette)
 
 
 def critique_epk_screenshot(
@@ -496,7 +557,13 @@ def critique_epk_screenshot(
     screenshot_png: bytes | None,
 ) -> dict[str, Any]:
     template = load_epk_vision_critique_template()
-    text_block = f"Artist spec:\n{spec}\n\nVision pack metadata:\n{json.dumps(vision_pack, indent=2)}"
+    font_block = ""
+    fp = vision_pack.get("font_palette")
+    if isinstance(fp, dict):
+        font_block = f"\n\nFont palette:\n{json.dumps(fp, indent=2)}"
+    text_block = (
+        f"Artist spec:\n{spec}\n\nVision pack metadata:\n{json.dumps(vision_pack, indent=2)}{font_block}"
+    )
     user_content: list[dict[str, Any]] = [{"type": "text", "text": text_block}]
 
     import base64

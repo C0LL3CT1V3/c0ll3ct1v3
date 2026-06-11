@@ -82,6 +82,11 @@ class ChooserGoogleImportOut(BaseModel):
     imported: list[ChooserImportResultItem]
 
 
+class ReferenceUrlBody(BaseModel):
+    url: str = Field(..., min_length=8, max_length=2048)
+    vision_id: str = Field(..., min_length=1, max_length=36)
+
+
 class AssetUpdateBody(BaseModel):
     title: str | None = None
     tags: dict[str, Any] | None = None

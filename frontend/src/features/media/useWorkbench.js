@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { externalUrlForAsset, isLikelyImageUrl } from './mediaUrlDrop';
 
 export function useWorkbench(apiClient, authReady, refreshKey) {
   const [visions, setVisions] = useState([]);
@@ -31,6 +32,11 @@ export function useWorkbench(apiClient, authReady, refreshKey) {
     (async () => {
       const next = {};
       for (const a of assets) {
+        const external = externalUrlForAsset(a);
+        if (external) {
+          if (isLikelyImageUrl(external)) next[a.id] = external;
+          continue;
+        }
         if (a.asset_type !== 'image') continue;
         try {
           const res = await apiClient.get(`/media/assets/${a.id}/preview-url`);
@@ -70,6 +76,11 @@ export function useWorkbench(apiClient, authReady, refreshKey) {
     return { grouped, ungrouped };
   }, [visions, assets]);
 
+  const createReferenceFromUrl = async (visionId, url) => {
+    await apiClient.post('/media/reference-urls', { vision_id: visionId, url });
+    await loadWorkbench();
+  };
+
   const assignAssetToVisionRole = async (assetId, visionId, role) => {
     await apiClient.patch(`/media/assets/${assetId}`, {
       vision_id: visionId,
@@ -82,13 +93,18 @@ export function useWorkbench(apiClient, authReady, refreshKey) {
     await assignAssetToVisionRole(assetId, visionId, 'media');
   };
 
+  const assignAssetToFolder = async (assetId, visionId) => {
+    await apiClient.patch(`/media/assets/${assetId}`, { vision_id: visionId });
+    await loadWorkbench();
+  };
+
   const deleteAsset = async (assetId) => {
     await apiClient.delete(`/media/assets/${assetId}`);
     await loadWorkbench();
   };
 
-  const createVision = async () => {
-    await apiClient.post('/media/visions', { title: 'Untitled vision' });
+  const createVision = async (title = 'New folder') => {
+    await apiClient.post('/media/visions', { title });
     await loadWorkbench();
   };
 
@@ -114,7 +130,9 @@ export function useWorkbench(apiClient, authReady, refreshKey) {
     visionTitleById,
     assetsByVision,
     assignAsset,
+    assignAssetToFolder,
     assignAssetToVisionRole,
+    createReferenceFromUrl,
     deleteAsset,
     createVision,
     renameVision,

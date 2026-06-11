@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import AssetListThumb from './AssetListThumb';
 import MediaDropzone from './MediaDropzone';
 import { setAssetDragData } from './mediaDrag';
 
@@ -14,6 +15,7 @@ function MediaFileSidebar({
   selectedId,
   onSelect,
   onDeleteAsset,
+  hint = 'Drag files into a vision on the right.',
 }) {
   const [open, setOpen] = useState(true);
 
@@ -50,7 +52,7 @@ function MediaFileSidebar({
             onUploaded={onUploaded}
             onError={onError}
           />
-          <p className="portal-sidebar-hint">Drag files into a vision on the right.</p>
+          <p className="portal-sidebar-hint">{hint}</p>
           <ul className="portal-file-list">
             {assets.length === 0 ? (
               <li className="portal-file-list-empty">No files yet.</li>
@@ -68,13 +70,7 @@ function MediaFileSidebar({
                       if (e.key === 'Enter') onSelect?.(a.id);
                     }}
                   >
-                    {thumbs[a.id] ? (
-                      <img src={thumbs[a.id]} alt="" className="portal-file-thumb" />
-                    ) : (
-                      <span className="portal-file-thumb portal-file-thumb--placeholder" aria-hidden>
-                        ·
-                      </span>
-                    )}
+                    <AssetListThumb asset={a} thumbUrl={thumbs[a.id]} />
                     <div className="portal-file-meta">
                       <span className="portal-file-title">{a.title || 'Untitled'}</span>
                       {a.vision_id && visionTitleById[a.vision_id] ? (

@@ -61,12 +61,47 @@ class ArtistProfileOut(BaseModel):
     tenant_slug: str
     display_name: str
     epk_config: EpkConfig
+    profile_published: bool = False
+    epk_public_published: bool = False
+    epk_public: dict[str, Any] = Field(default_factory=dict)
 
 
 class ArtistProfilePatch(BaseModel):
     display_name: str | None = None
     tenant_slug: str | None = None
     epk_config: EpkConfig | None = None
+
+
+class PublicProfileMediaOut(BaseModel):
+    asset_id: str
+    title: str | None = None
+    url: str | None = None
+    stream_url: str | None = None
+    mime_type: str | None = None
+
+
+class PublicProfileOut(BaseModel):
+    tenant_slug: str
+    display_name: str
+    tagline: str = ""
+    bio: str = ""
+    booking_email: str = ""
+    social: dict[str, str] = Field(default_factory=dict)
+    sections: dict[str, bool] = Field(default_factory=dict)
+    profile_published: bool = False
+    profile_published_at: str | None = None
+    mood: str = ""
+    format: str = "layout"
+    design: dict[str, Any] = Field(default_factory=dict)
+    site: dict[str, Any] = Field(default_factory=dict)
+    tracks: list[PublicProfileMediaOut] = Field(default_factory=list)
+    photos: list[PublicProfileMediaOut] = Field(default_factory=list)
+    html: str | None = None
+    css: str | None = None
+    asset_bindings: dict[str, str] = Field(default_factory=dict)
+    font_palette: dict[str, Any] | None = None
+    google_fonts_href: str | None = None
+    page_url: str | None = None
 
 
 class EpkSiteOut(BaseModel):
