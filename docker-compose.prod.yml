@@ -1,8 +1,11 @@
+# Production: pull pre-built images from ECR (build elsewhere, push with scripts/push-ecr.sh).
+# Set ECR_REGISTRY in a root .env file, e.g.:
+#   ECR_REGISTRY=756090160994.dkr.ecr.us-east-2.amazonaws.com
+
 services:
   backend:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile.prod
+    image: ${ECR_REGISTRY}/c0ll3ct1v3-backend:latest
+    restart: unless-stopped
     ports:
       - "8000:8000"
     env_file:
@@ -16,9 +19,8 @@ services:
       - redis
 
   media-worker:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile.worker
+    image: ${ECR_REGISTRY}/c0ll3ct1v3-worker:latest
+    restart: unless-stopped
     env_file:
       - ./backend/.env
     environment:
@@ -33,28 +35,21 @@ services:
     restart: unless-stopped
 
   frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile.prod
-      args:
-        - REACT_APP_API_URL=${REACT_APP_API_URL:-/api}
-        - REACT_APP_AUTH0_DOMAIN=${REACT_APP_AUTH0_DOMAIN}
-        - REACT_APP_AUTH0_CLIENT_ID=${REACT_APP_AUTH0_CLIENT_ID}
-        - REACT_APP_AUTH0_AUDIENCE=${REACT_APP_AUTH0_AUDIENCE}
-        - REACT_APP_AUTH0_SCOPE=${REACT_APP_AUTH0_SCOPE:-openid profile email}
-        - REACT_APP_AUTH0_MFA_ACR=${REACT_APP_AUTH0_MFA_ACR:-http://schemas.openid.net/pape/policies/2007/06/multi-factor}
+    image: ${ECR_REGISTRY}/c0ll3ct1v3-frontend:latest
+    restart: unless-stopped
     ports:
       - "80:80"
       - "443:443"
     volumes:
-      - ./infrastructure/ssl:/etc/nginx/ssl  # Mount SSL certificates (for updates without rebuild)
+      - ./infrastructure/ssl:/etc/nginx/ssl
     depends_on:
       - backend
 
   db:
     image: postgres:13
+    restart: unless-stopped
     environment:
       - POSTGRES_DB=collective
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-change_me}
     volumes:
-      - ./db_prod:/var/lib/postgresql/data  # Separate volume for prod
+      - ./db_prod:/var/lib/postgresql/data
