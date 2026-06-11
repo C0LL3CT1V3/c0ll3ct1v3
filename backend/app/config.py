@@ -65,10 +65,10 @@ class Settings(BaseSettings):
     encryption_key_id: str = ""
     redact_log_secrets: bool = True
 
-    # Creative media — DigitalOcean Spaces (S3-compatible) or MinIO
+    # Creative media — AWS S3, DigitalOcean Spaces, or MinIO (all S3-compatible)
     spaces_enabled: bool = False
-    spaces_endpoint: str = ""  # e.g. https://nyc3.digitaloceanspaces.com
-    spaces_region: str = "nyc3"
+    spaces_endpoint: str = ""  # AWS: https://s3.us-east-2.amazonaws.com — MinIO: http://minio:9000
+    spaces_region: str = "us-east-2"
     spaces_bucket: str = "pj-media"
     spaces_access_key: str = ""
     spaces_secret_key: str = ""

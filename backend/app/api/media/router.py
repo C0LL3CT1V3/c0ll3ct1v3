@@ -76,7 +76,7 @@ def _require_storage() -> None:
     if not settings.spaces_enabled:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Object storage is disabled. Set SPACES_ENABLED=true and configure Spaces/MinIO.",
+            detail="Object storage is disabled. Set SPACES_ENABLED=true and configure S3 (AWS bucket, Spaces, or MinIO).",
         )
 
 

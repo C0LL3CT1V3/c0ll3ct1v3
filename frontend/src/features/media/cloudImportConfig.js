@@ -30,7 +30,16 @@ export function isDropboxChooserEnabled() {
 
 export function getDropboxDisabledReason() {
   if (dropboxAppKey) return null;
-  return 'REACT_APP_DROPBOX_APP_KEY is missing. Restart the frontend after editing .env (Docker must mount frontend/.env).';
+  return 'REACT_APP_DROPBOX_APP_KEY is missing. Rebuild the frontend image (push-ecr.sh) with frontend/.env, or mount frontend/.env in dev.';
+}
+
+/** Shown when Chooser opens but Dropbox rejects the origin (domain not whitelisted). */
+export function getDropboxMisconfiguredHint() {
+  const origin = typeof window !== 'undefined' ? window.location.origin : 'your site';
+  return (
+    `Dropbox Chooser rejected this site. In Dropbox App Console → your app → Chooser / Saver → ` +
+    `add domain: ${origin} (and the other www/non-www variant if you use both).`
+  );
 }
 
 export function isGooglePickerEnabled() {

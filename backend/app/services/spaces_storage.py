@@ -43,37 +43,34 @@ def _presign_client(client: BaseClient) -> BaseClient:
 def get_s3_client() -> BaseClient:
     if not settings.spaces_enabled:
         raise RuntimeError("Object storage is disabled (SPACES_ENABLED=false).")
-    if not all(
-        [
-            settings.spaces_endpoint,
-            settings.spaces_bucket,
-            settings.spaces_access_key,
-            settings.spaces_secret_key,
-        ]
-    ):
-        raise RuntimeError("Spaces configuration incomplete; set endpoint, bucket, access key, and secret key.")
+    if not settings.spaces_bucket or not settings.spaces_region:
+        raise RuntimeError("Object storage configuration incomplete; set SPACES_BUCKET and SPACES_REGION.")
 
-    return boto3.client(
-        "s3",
-        endpoint_url=settings.spaces_endpoint.rstrip("/"),
-        region_name=settings.spaces_region,
-        aws_access_key_id=settings.spaces_access_key,
-        aws_secret_access_key=settings.spaces_secret_key,
-        config=Config(signature_version="s3v4", s3={"addressing_style": "path"}),
-    )
+    client_kwargs: dict[str, Any] = {
+        "service_name": "s3",
+        "region_name": settings.spaces_region,
+        "config": Config(signature_version="s3v4", s3={"addressing_style": "path"}),
+    }
+    if settings.spaces_endpoint:
+        client_kwargs["endpoint_url"] = settings.spaces_endpoint.rstrip("/")
+    if settings.spaces_access_key and settings.spaces_secret_key:
+        client_kwargs["aws_access_key_id"] = settings.spaces_access_key
+        client_kwargs["aws_secret_access_key"] = settings.spaces_secret_key
+
+    return boto3.client(**client_kwargs)
 
 
 def public_url_for_key(storage_key: str) -> str:
     """Return browser URL for a public object (CDN if configured)."""
     base = settings.media_cdn_base_url.rstrip("/") if settings.media_cdn_base_url else ""
     if not base:
-        # Virtual-host style: https://bucket.region.digitaloceanspaces.com/key
-        ep = settings.spaces_endpoint.rstrip("/")
-        if ".digitaloceanspaces.com" in ep and settings.spaces_bucket:
-            # endpoint is often https://nyc3.digitaloceanspaces.com
+        ep = settings.spaces_endpoint.rstrip("/") if settings.spaces_endpoint else ""
+        if ep:
             base = f"{ep}/{settings.spaces_bucket}"
+        elif settings.spaces_region and settings.spaces_bucket:
+            base = f"https://s3.{settings.spaces_region}.amazonaws.com/{settings.spaces_bucket}"
         else:
-            base = f"{ep}/{settings.spaces_bucket}"
+            raise RuntimeError("Cannot build public URL; set SPACES_ENDPOINT or SPACES_REGION.")
     return f"{base}/{storage_key.lstrip('/')}"
 
 

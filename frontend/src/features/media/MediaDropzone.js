@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import {
   getDropboxDisabledReason,
+  getDropboxMisconfiguredHint,
   getGoogleDisabledReason,
   isDropboxChooserEnabled,
   isGooglePickerEnabled,
@@ -60,7 +61,10 @@ function MediaDropzone({ apiClient, tenantSlug, onUploaded, onError }) {
       setUploadProgress('');
       onUploaded?.();
     } catch (err) {
-      onError?.(err?.response?.data?.detail || err.message || 'Dropbox import failed.');
+      const msg = err?.response?.data?.detail || err.message || 'Dropbox import failed.';
+      const hint =
+        /misconfigur|not configured properly/i.test(String(msg)) ? getDropboxMisconfiguredHint() : '';
+      onError?.(hint ? `${msg} ${hint}` : msg);
       setUploadProgress('');
     } finally {
       setUploading(false);

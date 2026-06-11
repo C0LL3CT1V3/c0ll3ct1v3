@@ -68,11 +68,42 @@ function loadScript(src, id) {
 }
 
 function ensureDropboxChooser() {
-  return loadScript(DROPBOX_SCRIPT, 'dropboxjs').then(() => {
-    if (!window.Dropbox) {
-      throw new Error('Dropbox Chooser failed to load.');
+  if (!dropboxAppKey) {
+    return Promise.reject(new Error('REACT_APP_DROPBOX_APP_KEY is missing.'));
+  }
+  return new Promise((resolve, reject) => {
+    const existing = document.getElementById('dropboxjs');
+    if (existing?.getAttribute('data-loaded') === 'true' && window.Dropbox) {
+      resolve();
+      return;
     }
-    window.Dropbox.appKey = dropboxAppKey;
+    const script = existing || document.createElement('script');
+    script.id = 'dropboxjs';
+    script.type = 'text/javascript';
+    script.async = true;
+    // Dropbox requires data-app-key on the script tag before dropins.js loads.
+    script.setAttribute('data-app-key', dropboxAppKey);
+    if (existing?.getAttribute('data-loaded') === 'true') {
+      if (window.Dropbox) {
+        resolve();
+        return;
+      }
+      existing.remove();
+      return ensureDropboxChooser().then(resolve, reject);
+    }
+    script.onload = () => {
+      script.setAttribute('data-loaded', 'true');
+      if (!window.Dropbox) {
+        reject(new Error('Dropbox Chooser failed to load.'));
+        return;
+      }
+      resolve();
+    };
+    script.onerror = () => reject(new Error('Failed to load Dropbox Chooser script.'));
+    script.src = DROPBOX_SCRIPT;
+    if (!existing) {
+      document.body.appendChild(script);
+    }
   });
 }
 
