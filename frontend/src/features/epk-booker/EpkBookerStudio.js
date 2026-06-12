@@ -3,8 +3,10 @@ import AssetListThumb from '../media/AssetListThumb';
 import { getAssetDragId } from '../media/mediaDrag';
 import VaultSidebarPanel from '../vault/VaultSidebarPanel';
 import { usePortalWorkbench } from '../media/PortalWorkbenchProvider';
+import ArtistProfileSettings from './ArtistProfileSettings';
 import EpkBookerReadiness from './EpkBookerReadiness';
 import { useEpkBooker } from './useEpkBooker';
+import { profilePublicUrl } from '../../hooks/useTenantSlug';
 
 const MAX_PHOTOS = 6;
 const MAX_AUDIO = 3;
@@ -67,9 +69,10 @@ function DropSlot({
   );
 }
 
-function EpkBookerStudio({ profile }) {
+function EpkBookerStudio({ profile, updateProfile, onProfileRefresh }) {
   const { workbench, setMediaError } = usePortalWorkbench();
   const booker = useEpkBooker(profile?.tenant_slug);
+  const [settingsError, setSettingsError] = useState('');
   const [heroUrl, setHeroUrl] = useState('');
   const [bio, setBio] = useState('');
   const [bookingEmail, setBookingEmail] = useState('');
@@ -171,10 +174,33 @@ function EpkBookerStudio({ profile }) {
   const resolvedPhotos = booker.resolved?.photos || [];
   const resolvedAudio = booker.resolved?.audio_samples || [];
   const heroResolved = booker.resolved?.hero_video;
+  const isPublished = Boolean(booker.config?.published || profile?.epk_public_published);
+  const liveEpkUrl =
+    booker.data?.public_epk_url ||
+    (profile?.tenant_slug ? `${profilePublicUrl(profile.tenant_slug)}/epk` : null);
+
+  const handlePublish = async () => {
+    try {
+      await booker.publish();
+      await onProfileRefresh?.();
+    } catch {
+      /* error shown via booker.error */
+    }
+  };
 
   return (
     <div className="epk-booker-studio">
+      <ArtistProfileSettings
+        profile={profile}
+        updateProfile={updateProfile}
+        onSaved={() => onProfileRefresh?.()}
+        onError={setSettingsError}
+      />
+      {settingsError ? <div className="error-message">{settingsError}</div> : null}
       <EpkBookerReadiness completeness={booker.completeness} />
+      {booker.publishMessage ? (
+        <div className="portal-success-message">{booker.publishMessage}</div>
+      ) : null}
       {booker.error ? <div className="error-message">{booker.error}</div> : null}
       <div className="portal-studio-panels portal-studio-panels--epk">
         <VaultSidebarPanel
@@ -199,10 +225,20 @@ function EpkBookerStudio({ profile }) {
               type="button"
               className="portal-btn portal-btn--primary"
               disabled={booker.busy}
-              onClick={() => booker.publish()}
+              onClick={handlePublish}
             >
               Publish EPK
             </button>
+            {isPublished && liveEpkUrl ? (
+              <a
+                href={liveEpkUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="portal-btn portal-btn--ghost"
+              >
+                View live EPK
+              </a>
+            ) : null}
             <button
               type="button"
               className="portal-btn portal-btn--ghost"

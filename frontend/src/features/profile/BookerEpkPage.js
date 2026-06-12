@@ -13,8 +13,11 @@ function BookerEpkPage() {
       setLoading(false);
       return;
     }
-    const apiBase = process.env.REACT_APP_API_BASE_URL || 'http://localhost:8080';
-    fetch(`${apiBase}/artists/public/${tenantSlug}/epk/page`)
+    const apiBase = (process.env.REACT_APP_API_URL || '/api').replace(/\/$/, '');
+    const url = apiBase.startsWith('http')
+      ? `${apiBase}/artists/public/${tenantSlug}/epk/page`
+      : `${window.location.origin}${apiBase}/artists/public/${tenantSlug}/epk/page`;
+    fetch(url)
       .then((res) => {
         if (!res.ok) throw new Error('EPK not found or not published.');
         return res.text();

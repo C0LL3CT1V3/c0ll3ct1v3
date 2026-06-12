@@ -1,7 +1,7 @@
 import React from 'react';
 import EpkBookerStudio from '../../features/epk-booker/EpkBookerStudio';
 
-function PortalEpkPage({ profile }) {
+function PortalEpkPage({ profile, updateProfile, onProfileRefresh }) {
   return (
     <div className="portal-studio portal-studio--epk">
       <header className="portal-section-header">
@@ -10,7 +10,11 @@ function PortalEpkPage({ profile }) {
           Booker-ready press kit — fill the template from your Vault, preview, publish, and export PDF.
         </p>
       </header>
-      <EpkBookerStudio profile={profile} />
+      <EpkBookerStudio
+        profile={profile}
+        updateProfile={updateProfile}
+        onProfileRefresh={onProfileRefresh}
+      />
     </div>
   );
 }

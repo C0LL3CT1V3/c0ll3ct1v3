@@ -161,6 +161,19 @@ Instead of exposing your local machine, consider:
 
 **Important:** DNS propagation can take 24-48 hours, but usually happens within a few hours. You can check propagation status at https://www.whatsmydns.net/
 
+### Route 53 (production: c0ll3ct1v3.xyz)
+
+1. Open **Route 53** → **Hosted zones** → `c0ll3ct1v3.xyz`
+2. Create **A** records (use your EC2 **Elastic IP**):
+
+| Record name | Type | Value |
+|-------------|------|-------|
+| (apex) | A | Elastic IP |
+| `www` | A | Elastic IP |
+| `*` | A | Elastic IP |
+
+The `*` record routes all artist subdomains (e.g. `phillipjames.c0ll3ct1v3.xyz`) to the same EC2 instance.
+
 ## Step 3: Set Up Your Server
 
 ### 3.1 Initial Server Setup
@@ -213,21 +226,40 @@ sudo chown -R deploy:deploy /opt/c0ll3ct1v3
 cd /opt/c0ll3ct1v3
 ```
 
-### 4.2 Set Up SSL Certificates
+### 4.2 Set Up SSL Certificates (Route 53 wildcard)
 
-Run the SSL setup script (this will use Let's Encrypt):
+Artist subdomains (`phillipjames.c0ll3ct1v3.xyz`, etc.) need a **wildcard** cert. DNS is on **Route 53**, so use Certbot's Route 53 DNS plugin (not HTTP standalone).
+
+**Prerequisites**
+
+1. Route 53 A records in the `c0ll3ct1v3.xyz` hosted zone:
+   - `@` → EC2 Elastic IP
+   - `www` → same IP
+   - `*` → same IP (wildcard for artist subdomains)
+2. EC2 instance role with Route 53 permissions (see `infrastructure/scripts/aws-route53-certbot-iam-policy.json`; replace `YOUR_HOSTED_ZONE_ID`).
+3. AWS CLI available on the instance (`aws sts get-caller-identity` should succeed).
+
+**Issue cert on EC2**
 
 ```bash
-cd /opt/c0ll3ct1v3
+cd /opt/c0ll3ct1v3   # or your prod checkout path
 chmod +x infrastructure/scripts/setup-ssl.sh
-./infrastructure/scripts/setup-ssl.sh YOUR_DOMAIN.com
+./infrastructure/scripts/setup-ssl.sh c0ll3ct1v3.xyz
 ```
 
-This script will:
-- Install Certbot
-- Obtain SSL certificates from Let's Encrypt
-- Set up auto-renewal
-- Copy certificates to the correct location
+The script will:
+- Install Certbot + `python3-certbot-dns-route53`
+- Request Let's Encrypt certs for `c0ll3ct1v3.xyz` and `*.c0ll3ct1v3.xyz`
+- Use contact email `archie@c0ll3ctv3.xyz` (override with `CERTBOT_EMAIL=...` if needed)
+- Copy certs to `infrastructure/ssl/` for the frontend nginx container
+- Install a renewal deploy hook and run `certbot renew --dry-run`
+
+**Verify**
+
+```bash
+curl -I https://c0ll3ct1v3.xyz
+curl -I https://phillipjames.c0ll3ct1v3.xyz/epk
+```
 
 ### 4.3 Configure Environment Variables
 
@@ -245,9 +277,9 @@ POSTGRES_PASSWORD=STRONG_PASSWORD_HERE
 DOMAIN=yourdomain.com
 ```
 
-### 4.4 Update Nginx Configuration
+### 4.4 Nginx configuration
 
-The nginx config will be automatically updated by the SSL setup script. If you need to manually update it, edit `infrastructure/nginx.prod.conf` and replace `server_name _;` with `server_name yourdomain.com www.yourdomain.com;`
+`infrastructure/nginx.prod.conf` already listens for `c0ll3ct1v3.xyz`, `www`, and `*.c0ll3ct1v3.xyz`. No nginx edits are required after the wildcard cert is in `infrastructure/ssl/`.
 
 ### 4.5 Build and Start Services
 

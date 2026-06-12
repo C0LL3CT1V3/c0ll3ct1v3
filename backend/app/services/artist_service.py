@@ -77,7 +77,40 @@ def user_may_claim_default_tenant_workspace(user: User) -> bool:
     for marker in _claim_markers():
         if marker and marker in email:
             return True
+    name = (user.name or "").lower()
+    if "phillip" in name:
+        return True
     return False
+
+
+def _is_seed_artist(artist: Artist) -> bool:
+    return (artist.auth0_sub or "").startswith("seed:")
+
+
+def claim_tenant_slug(
+    db: Session,
+    *,
+    artist: Artist,
+    user: User,
+    new_slug: str,
+) -> Artist:
+    """Assign tenant_slug, claiming a seed row when the slug is held by seed:*."""
+    slug = validate_tenant_slug(new_slug)
+    if artist.tenant_slug == slug:
+        return artist
+
+    conflict = (
+        db.query(Artist).filter(Artist.tenant_slug == slug, Artist.id != artist.id).first()
+    )
+    if conflict:
+        if _is_seed_artist(conflict) and user_may_claim_default_tenant_workspace(user):
+            if artist.id != conflict.id:
+                _merge_stray_artist_into_canonical(db, dup=artist, canonical=conflict, user=user)
+            return conflict
+        raise ValueError("tenant_slug already in use.")
+
+    artist.tenant_slug = slug
+    return artist
 
 
 def _display_name_for_user(user: User, slug: str) -> str:
@@ -121,11 +154,30 @@ def get_or_create_artist(db: Session, user: User) -> Artist:
     canonical = get_artist_by_slug(db, canon)
     existing = get_artist_by_sub(db, sub)
 
-    # One-time: bind the primary (seeded) tenant row to this Auth0 user and fold stray profiles.
+    # Phillip: claim the phillipjames seed row when present (not the generic demo default).
+    if user_may_claim_default_tenant_workspace(user):
+        phillip_row = get_artist_by_slug(db, "phillipjames")
+        if phillip_row and _is_seed_artist(phillip_row):
+            if existing is None:
+                phillip_row.auth0_sub = sub
+                if user.name and user.name.strip():
+                    phillip_row.display_name = user.name.strip()
+                db.commit()
+                db.refresh(phillip_row)
+                return phillip_row
+            if existing.id != phillip_row.id:
+                _merge_stray_artist_into_canonical(
+                    db, dup=existing, canonical=phillip_row, user=user
+                )
+                db.commit()
+                db.refresh(phillip_row)
+                return phillip_row
+
+    # One-time: bind the generic seeded default tenant row to this Auth0 user and fold stray profiles.
     if (
         user_may_claim_default_tenant_workspace(user)
         and canonical is not None
-        and (canonical.auth0_sub or "").startswith("seed:")
+        and _is_seed_artist(canonical)
     ):
         if existing is None:
             canonical.auth0_sub = sub
@@ -144,8 +196,13 @@ def get_or_create_artist(db: Session, user: User) -> Artist:
         return existing
 
     email = (user.email or "").lower()
-    if "phillip" in email or email.endswith("@phillipjames.com"):
-        base = settings.default_media_tenant_slug
+    name = (user.name or "").lower()
+    if (
+        "phillip" in email
+        or email.endswith("@phillipjames.com")
+        or "phillip" in name
+    ):
+        base = "phillipjames"
     else:
         base = _slug_from_email(email)
 

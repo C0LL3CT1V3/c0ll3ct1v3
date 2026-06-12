@@ -7,7 +7,7 @@ import PortalVaultPage from './PortalVaultPage';
 import PortalEpkPage from './PortalEpkPage';
 
 function PortalShell() {
-  const { profile, loading, error: profileError } = useArtistProfile();
+  const { profile, loading, error: profileError, refresh, updateProfile } = useArtistProfile();
 
   if (loading) {
     return (
@@ -24,7 +24,16 @@ function PortalShell() {
         <Routes>
           <Route index element={<Navigate to="vault" replace />} />
           <Route path="vault" element={<PortalVaultPage profile={profile} />} />
-          <Route path="epk" element={<PortalEpkPage profile={profile} />} />
+          <Route
+            path="epk"
+            element={
+              <PortalEpkPage
+                profile={profile}
+                updateProfile={updateProfile}
+                onProfileRefresh={refresh}
+              />
+            }
+          />
           <Route path="profile" element={<Navigate to="/portal/vault" replace />} />
           <Route path="data" element={<Navigate to="/portal/vault" replace />} />
           <Route path="*" element={<Navigate to="vault" replace />} />

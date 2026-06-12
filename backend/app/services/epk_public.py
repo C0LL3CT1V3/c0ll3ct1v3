@@ -18,6 +18,7 @@ from ..schemas.epk_public_schemas import EpkPublicConfig, EpkPublicPatch
 from .epk_media import STREAMING_KEYS, SOCIAL_KEYS, epk_content_hash, media_proxy_url
 from .epk_streaming_logos import streaming_logo_link
 from .epk_preview_token import epk_preview_page_url, mint_epk_preview_token
+from .public_urls import public_epk_url
 from .epk_public_config import coerce_epk_public, get_epk_public_raw
 from .media_variants import best_image_variant, url_for_variant
 from .spaces_storage import get_s3_client, presigned_get_object
@@ -271,6 +272,7 @@ def get_my_epk_public(db: Session, artist: Artist) -> dict[str, Any]:
         "resolved": resolved,
         "completeness": completeness,
         "preview_url": f"/artists/public/{artist.tenant_slug}/epk/page",
+        "public_epk_url": public_epk_url(artist.tenant_slug),
     }
 
 

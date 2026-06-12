@@ -58,11 +58,22 @@ done
 
 aws ecr get-login-password --region "$REGION" | docker login --username AWS --password-stdin "$REGISTRY"
 
-docker build -f backend/Dockerfile.prod -t c0ll3ct1v3-backend:latest ./backend
-docker build -f backend/Dockerfile.worker -t c0ll3ct1v3-worker:latest ./backend
+# BuildKit-only flags (legacy docker build rejects --provenance). Skip when buildx/BuildKit unavailable.
+BUILD_OPTS=()
+if docker buildx version >/dev/null 2>&1; then
+  BUILD_OPTS=(--provenance=false --sbom=false)
+elif DOCKER_BUILDKIT=1 docker build --help 2>&1 | grep -q -- '--provenance'; then
+  export DOCKER_BUILDKIT=1
+  BUILD_OPTS=(--provenance=false --sbom=false)
+else
+  echo "Using legacy docker builder (no buildx). Plain docker build — install docker-buildx-plugin if ECR digest errors persist."
+fi
+
+docker build "${BUILD_OPTS[@]}" -f backend/Dockerfile.prod -t c0ll3ct1v3-backend:latest ./backend
+docker build "${BUILD_OPTS[@]}" -f backend/Dockerfile.worker -t c0ll3ct1v3-worker:latest ./backend
 
 # --no-cache: prior builds cached empty REACT_APP_* layers when args were not passed.
-docker build --no-cache -f frontend/Dockerfile.prod \
+docker build --no-cache "${BUILD_OPTS[@]}" -f frontend/Dockerfile.prod \
   --build-arg REACT_APP_API_URL \
   --build-arg REACT_APP_AUTH0_DOMAIN \
   --build-arg REACT_APP_AUTH0_CLIENT_ID \
@@ -78,7 +89,31 @@ docker build --no-cache -f frontend/Dockerfile.prod \
 
 for name in backend frontend worker; do
   docker tag "c0ll3ct1v3-${name}:latest" "$REGISTRY/c0ll3ct1v3-${name}:latest"
-  docker push "$REGISTRY/c0ll3ct1v3-${name}:latest"
+  # Retry push once on ECR layer digest mismatch (corrupt/incomplete upload).
+  if ! docker push "$REGISTRY/c0ll3ct1v3-${name}:latest"; then
+    echo "WARN: push failed for ${name}; rebuilding and retrying once..." >&2
+    case "$name" in
+      backend) docker build "${BUILD_OPTS[@]}" -f backend/Dockerfile.prod -t "c0ll3ct1v3-${name}:latest" ./backend ;;
+      worker) docker build "${BUILD_OPTS[@]}" -f backend/Dockerfile.worker -t "c0ll3ct1v3-${name}:latest" ./backend ;;
+      frontend)
+        docker build --no-cache "${BUILD_OPTS[@]}" -f frontend/Dockerfile.prod \
+          --build-arg REACT_APP_API_URL \
+          --build-arg REACT_APP_AUTH0_DOMAIN \
+          --build-arg REACT_APP_AUTH0_CLIENT_ID \
+          --build-arg REACT_APP_AUTH0_AUDIENCE \
+          --build-arg REACT_APP_AUTH0_SCOPE \
+          --build-arg REACT_APP_AUTH0_MFA_ACR \
+          --build-arg REACT_APP_DROPBOX_APP_KEY \
+          --build-arg REACT_APP_GOOGLE_CLIENT_ID \
+          --build-arg REACT_APP_GOOGLE_API_KEY \
+          --build-arg REACT_APP_GOOGLE_APP_ID \
+          --build-arg REACT_APP_DEFAULT_TENANT \
+          -t "c0ll3ct1v3-${name}:latest" ./frontend
+        ;;
+    esac
+    docker tag "c0ll3ct1v3-${name}:latest" "$REGISTRY/c0ll3ct1v3-${name}:latest"
+    docker push "$REGISTRY/c0ll3ct1v3-${name}:latest"
+  fi
 done
 
 echo "Pushed to $REGISTRY"

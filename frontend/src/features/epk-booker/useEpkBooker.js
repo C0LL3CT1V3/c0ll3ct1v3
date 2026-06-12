@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useApiClient } from '../../hooks/useApiClient';
+import { normalizeApiUrl } from './epkUrlUtils';
 export function useEpkBooker(tenantSlug) {
   const { apiClient, authReady } = useApiClient();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [publishMessage, setPublishMessage] = useState('');
 
   const load = useCallback(async () => {
     try {
@@ -42,10 +44,17 @@ export function useEpkBooker(tenantSlug) {
 
   const publish = async () => {
     setBusy(true);
+    setPublishMessage('');
     try {
       const res = await apiClient.post('/artists/me/epk-public/publish');
       setData(res.data);
       setError('');
+      const liveUrl = res.data?.public_epk_url;
+      setPublishMessage(
+        liveUrl
+          ? `EPK published. Live at ${liveUrl}`
+          : 'EPK published — your booker page is now public.',
+      );
       return res.data;
     } catch (err) {
       const msg = err?.response?.data?.detail || 'Publish failed.';
@@ -80,7 +89,7 @@ export function useEpkBooker(tenantSlug) {
     setError('');
     try {
       const res = await apiClient.post('/artists/me/epk-public/preview-link');
-      const url = res.data?.preview_url;
+      const url = normalizeApiUrl(res.data?.preview_url);
       if (!url) throw new Error('No preview URL returned.');
       window.open(url, '_blank', 'noopener,noreferrer');
     } catch (err) {
@@ -100,6 +109,7 @@ export function useEpkBooker(tenantSlug) {
     loading,
     error,
     busy,
+    publishMessage,
     patch,
     publish,
     downloadPdf,

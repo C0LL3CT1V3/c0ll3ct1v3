@@ -18,7 +18,7 @@ from ...schemas.artist_schemas import (
 )
 from ...schemas.audience_schemas import AudienceMapReport
 from ...schemas.epk_public_schemas import EpkPublicOut, EpkPublicPatch, PublicBookerEpkOut
-from ...services.artist_service import get_or_create_artist, validate_tenant_slug
+from ...services.artist_service import claim_tenant_slug, get_or_create_artist
 from ...services.epk_pdf import generate_booker_epk_pdf
 from ...services.epk_media import collect_epk_asset_ids, epk_content_hash, redirect_epk_asset
 from ...services.epk_preview_token import verify_epk_preview_token
@@ -114,17 +114,12 @@ def patch_my_profile(
 
     if body.tenant_slug is not None:
         try:
-            new_slug = validate_tenant_slug(body.tenant_slug)
+            artist = claim_tenant_slug(db, artist=artist, user=current_user, new_slug=body.tenant_slug)
         except ValueError as exc:
-            raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
-        conflict = (
-            db.query(Artist)
-            .filter(Artist.tenant_slug == new_slug, Artist.id != artist.id)
-            .first()
-        )
-        if conflict:
-            raise HTTPException(status.HTTP_409_CONFLICT, detail="tenant_slug already in use.")
-        artist.tenant_slug = new_slug
+            msg = str(exc)
+            if msg == "tenant_slug already in use.":
+                raise HTTPException(status.HTTP_409_CONFLICT, detail=msg) from exc
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=msg) from exc
 
     if body.epk_config is not None:
         merged = {**(artist.epk_config or {}), **body.epk_config.model_dump()}
@@ -175,7 +170,12 @@ def create_epk_preview_link_route(
 ) -> dict:
     """Return a tokenized preview URL that works in a new tab (no auth header needed)."""
     artist = get_or_create_artist(db, current_user)
-    return {"preview_url": create_epk_preview_link(db, artist)}
+    from ...services.public_urls import public_epk_url
+
+    return {
+        "preview_url": create_epk_preview_link(db, artist),
+        "public_epk_url": public_epk_url(artist.tenant_slug),
+    }
 
 
 @router.get("/epk-preview/page", response_class=HTMLResponse)

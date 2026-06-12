@@ -18,7 +18,7 @@ function AdminMedia() {
 
   const tenantSlug =
     profile?.tenant_slug ||
-    (process.env.REACT_APP_DEFAULT_TENANT || 'phillipjames').trim();
+    (process.env.REACT_APP_DEFAULT_TENANT || 'demo').trim();
 
   const loadAssets = useCallback(async () => {
     try {

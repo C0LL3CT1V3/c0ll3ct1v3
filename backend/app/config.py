@@ -74,7 +74,7 @@ class Settings(BaseSettings):
     spaces_secret_key: str = ""
     spaces_public_endpoint: str = ""  # Browser-facing endpoint for presigned URLs (e.g. http://localhost:9000)
     media_cdn_base_url: str = ""  # Spaces CDN endpoint; omit to build from bucket + endpoint
-    default_media_tenant_slug: str = "phillipjames"
+    default_media_tenant_slug: str = "demo"
     # Shared secret for CLI / automation on /manager/* (Bearer + X-Tenant-Slug). Empty = disabled.
     c0ll3ct1v3_agent_key: str = ""
     # Scoped in-process manager agent (OpenRouter by default)
@@ -90,7 +90,9 @@ class Settings(BaseSettings):
     manager_tool_mode: str = "auto"
     # EPK html_v1 build loop
     epk_playwright_enabled: bool = False
+    # Browser-reachable API origin for EPK preview/PDF/media proxy (prod: https://c0ll3ct1v3.xyz/api)
     epk_sim_base_url: str = "http://localhost:8080"
+    public_site_domain: str = "c0ll3ct1v3.xyz"
     epk_build_max_revisions: int = 2
     manager_vision_model: str = "google/gemini-2.0-flash-001"
     openai_api_key: str = ""

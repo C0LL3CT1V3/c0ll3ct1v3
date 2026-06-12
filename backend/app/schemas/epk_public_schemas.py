@@ -75,6 +75,7 @@ class EpkPublicOut(BaseModel):
     resolved: dict[str, Any] = Field(default_factory=dict)
     completeness: dict[str, Any] | None = None
     preview_url: str | None = None
+    public_epk_url: str | None = None
 
 
 class PublicBookerEpkOut(BaseModel):
