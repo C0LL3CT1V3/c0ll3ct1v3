@@ -122,24 +122,69 @@ CERTBOT_AWS_ENV=(
     AWS_CONFIG_FILE=/dev/null
 )
 
-log_info "Obtaining wildcard certificate from Let's Encrypt (Route 53 DNS challenge)..."
-sudo "${CERTBOT_AWS_ENV[@]}" certbot certonly \
-    --dns-route53 \
-    --non-interactive \
-    --agree-tos \
-    --email "$EMAIL" \
-    -d "$DOMAIN" \
-    -d "$WILDCARD_DOMAIN"
+CERT_NAME="${DOMAIN}-wildcard"
 
-CERT_PATH="/etc/letsencrypt/live/$DOMAIN"
-log_info "Copying certificates to $SSL_DIR..."
-sudo cp "$CERT_PATH/fullchain.pem" "$SSL_DIR/cert.pem"
-sudo cp "$CERT_PATH/privkey.pem" "$SSL_DIR/key.pem"
-sudo chown "$USER:$USER" "$SSL_DIR/cert.pem" "$SSL_DIR/key.pem"
-sudo chmod 644 "$SSL_DIR/cert.pem"
-sudo chmod 600 "$SSL_DIR/key.pem"
-log_info "Certificates copied"
+find_wildcard_live_dir() {
+    local dir cert
+    for dir in /etc/letsencrypt/live/"${DOMAIN}"*; do
+        [ -d "$dir" ] || continue
+        cert="$dir/cert.pem"
+        [ -f "$cert" ] || continue
+        if sudo openssl x509 -in "$cert" -noout -text 2>/dev/null | grep -q "DNS:\*\.${DOMAIN}"; then
+            printf '%s' "$dir"
+            return 0
+        fi
+    done
+    return 1
+}
 
+copy_certs_to_project() {
+    local live_dir="$1"
+    log_info "Copying certificates from $live_dir to $SSL_DIR..."
+    sudo cp "$live_dir/fullchain.pem" "$SSL_DIR/cert.pem"
+    sudo cp "$live_dir/privkey.pem" "$SSL_DIR/key.pem"
+    sudo chown "$USER:$USER" "$SSL_DIR/cert.pem" "$SSL_DIR/key.pem"
+    sudo chmod 644 "$SSL_DIR/cert.pem"
+    sudo chmod 600 "$SSL_DIR/key.pem"
+    if openssl x509 -in "$SSL_DIR/cert.pem" -noout -text 2>/dev/null | grep -q "DNS:\*\.${DOMAIN}"; then
+        log_info "Deployed cert includes wildcard *.$DOMAIN"
+    else
+        log_warn "Deployed cert still missing wildcard *.$DOMAIN"
+    fi
+}
+
+WILDCARD_LIVE_DIR="$(find_wildcard_live_dir || true)"
+if [ -n "$WILDCARD_LIVE_DIR" ]; then
+    log_info "Wildcard certificate already present at $WILDCARD_LIVE_DIR"
+else
+    log_info "Obtaining wildcard certificate from Let's Encrypt (Route 53 DNS challenge)..."
+    sudo "${CERTBOT_AWS_ENV[@]}" certbot certonly \
+        --dns-route53 \
+        --non-interactive \
+        --agree-tos \
+        --email "$EMAIL" \
+        --cert-name "$CERT_NAME" \
+        -d "$DOMAIN" \
+        -d "$WILDCARD_DOMAIN"
+    WILDCARD_LIVE_DIR="$(find_wildcard_live_dir || true)"
+fi
+
+if [ -z "$WILDCARD_LIVE_DIR" ]; then
+    log_error "Could not find a wildcard cert for *.$DOMAIN under /etc/letsencrypt/live/"
+    log_error "Run: sudo certbot certificates"
+    exit 1
+fi
+
+copy_certs_to_project "$WILDCARD_LIVE_DIR"
+
+# Drop stale apex-only lineage (HTTP standalone) so renew does not fight port 80.
+if [ -f "/etc/letsencrypt/renewal/${DOMAIN}.conf" ] && [ "$WILDCARD_LIVE_DIR" != "/etc/letsencrypt/live/${DOMAIN}" ]; then
+    if ! sudo grep -q '\*\.' "/etc/letsencrypt/renewal/${DOMAIN}.conf" 2>/dev/null; then
+        log_info "Removing old apex-only cert lineage (${DOMAIN})..."
+        sudo certbot delete --cert-name "$DOMAIN" --non-interactive 2>/dev/null || \
+            log_warn "Could not delete old cert ${DOMAIN}; run: sudo certbot delete --cert-name ${DOMAIN}"
+    fi
+fi
 log_info "Installing renewal deploy hook..."
 RENEWAL_HOOK="/etc/letsencrypt/renewal-hooks/deploy/copy-c0ll3ct1v3-certs.sh"
 sudo mkdir -p /etc/letsencrypt/renewal-hooks/deploy
@@ -150,20 +195,40 @@ set -e
 DOMAIN="$DOMAIN"
 SSL_DIR="$SSL_DIR"
 COMPOSE_FILE="$COMPOSE_FILE"
+PROJECT_ROOT="$PROJECT_ROOT"
 
-cp "/etc/letsencrypt/live/\$DOMAIN/fullchain.pem" "\$SSL_DIR/cert.pem"
-cp "/etc/letsencrypt/live/\$DOMAIN/privkey.pem" "\$SSL_DIR/key.pem"
+find_wildcard_live_dir() {
+    local dir cert
+    for dir in /etc/letsencrypt/live/\${DOMAIN}*; do
+        [ -d "\$dir" ] || continue
+        cert="\$dir/cert.pem"
+        [ -f "\$cert" ] || continue
+        if openssl x509 -in "\$cert" -noout -text 2>/dev/null | grep -q "DNS:\*\\\\.\${DOMAIN}"; then
+            printf '%s' "\$dir"
+            return 0
+        fi
+    done
+    return 1
+}
+
+LIVE_DIR="\$(find_wildcard_live_dir)"
+[ -n "\$LIVE_DIR" ] || exit 0
+
+cp "\$LIVE_DIR/fullchain.pem" "\$SSL_DIR/cert.pem"
+cp "\$LIVE_DIR/privkey.pem" "\$SSL_DIR/key.pem"
 chmod 644 "\$SSL_DIR/cert.pem"
 chmod 600 "\$SSL_DIR/key.pem"
 
-cd "$PROJECT_ROOT"
+cd "\$PROJECT_ROOT"
 docker compose -f "\$COMPOSE_FILE" exec -T frontend nginx -s reload 2>/dev/null || true
 EOF
 
 sudo chmod +x "$RENEWAL_HOOK"
 
-log_info "Testing certificate renewal (dry run)..."
-if sudo "${CERTBOT_AWS_ENV[@]}" certbot renew --dry-run; then
+log_info "Testing certificate renewal (dry run, wildcard lineages only)..."
+if sudo "${CERTBOT_AWS_ENV[@]}" certbot renew --dry-run --cert-name "${DOMAIN}-wildcard" 2>/dev/null || \
+   sudo "${CERTBOT_AWS_ENV[@]}" certbot renew --dry-run --cert-name "${DOMAIN}-0001" 2>/dev/null || \
+   sudo "${CERTBOT_AWS_ENV[@]}" certbot renew --dry-run; then
     log_info "Auto-renewal dry run succeeded"
 else
     log_warn "Auto-renewal dry run failed; certs are installed but check IAM + Route 53 permissions"
