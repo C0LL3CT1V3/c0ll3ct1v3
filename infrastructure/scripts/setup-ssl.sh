@@ -126,11 +126,19 @@ CERT_NAME="${DOMAIN}-wildcard"
 
 find_wildcard_live_dir() {
     local dir cert
-    for dir in /etc/letsencrypt/live/"${DOMAIN}"*; do
-        [ -d "$dir" ] || continue
+    local -a candidates=()
+    while IFS= read -r dir; do
+        [ -n "$dir" ] && candidates+=("$dir")
+    done < <(sudo find /etc/letsencrypt/live -maxdepth 1 -type d -name "${DOMAIN}*" 2>/dev/null || true)
+    candidates+=(
+        "/etc/letsencrypt/live/${CERT_NAME}"
+        "/etc/letsencrypt/live/${DOMAIN}-wildcard"
+        "/etc/letsencrypt/live/${DOMAIN}-0001"
+    )
+    for dir in "${candidates[@]}"; do
         cert="$dir/cert.pem"
-        [ -f "$cert" ] || continue
-        if sudo openssl x509 -in "$cert" -noout -text 2>/dev/null | grep -q "DNS:\*\.${DOMAIN}"; then
+        sudo test -f "$cert" 2>/dev/null || continue
+        if sudo openssl x509 -in "$cert" -noout -text 2>/dev/null | grep -qF "*.${DOMAIN}"; then
             printf '%s' "$dir"
             return 0
         fi
@@ -146,7 +154,7 @@ copy_certs_to_project() {
     sudo chown "$USER:$USER" "$SSL_DIR/cert.pem" "$SSL_DIR/key.pem"
     sudo chmod 644 "$SSL_DIR/cert.pem"
     sudo chmod 600 "$SSL_DIR/key.pem"
-    if openssl x509 -in "$SSL_DIR/cert.pem" -noout -text 2>/dev/null | grep -q "DNS:\*\.${DOMAIN}"; then
+    if openssl x509 -in "$SSL_DIR/cert.pem" -noout -text 2>/dev/null | grep -qF "*.${DOMAIN}"; then
         log_info "Deployed cert includes wildcard *.$DOMAIN"
     else
         log_warn "Deployed cert still missing wildcard *.$DOMAIN"
@@ -199,11 +207,13 @@ PROJECT_ROOT="$PROJECT_ROOT"
 
 find_wildcard_live_dir() {
     local dir cert
-    for dir in /etc/letsencrypt/live/\${DOMAIN}*; do
-        [ -d "\$dir" ] || continue
+    local candidates=""
+    candidates="\$(sudo find /etc/letsencrypt/live -maxdepth 1 -type d -name "\${DOMAIN}*" 2>/dev/null || true)"
+    candidates="\$candidates /etc/letsencrypt/live/\${DOMAIN}-wildcard /etc/letsencrypt/live/\${DOMAIN}-0001"
+    for dir in \$candidates; do
         cert="\$dir/cert.pem"
-        [ -f "\$cert" ] || continue
-        if openssl x509 -in "\$cert" -noout -text 2>/dev/null | grep -q "DNS:\*\\\\.\${DOMAIN}"; then
+        sudo test -f "\$cert" 2>/dev/null || continue
+        if sudo openssl x509 -in "\$cert" -noout -text 2>/dev/null | grep -qF "*.\${DOMAIN}"; then
             printf '%s' "\$dir"
             return 0
         fi
