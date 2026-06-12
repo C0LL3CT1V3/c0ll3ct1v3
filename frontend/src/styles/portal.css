@@ -2312,14 +2312,14 @@
   margin: 0 1rem 1rem;
 }
 
-.booker-epk-iframe {
+.booker-epk-page {
   width: 100%;
-  height: auto;
-  min-height: 0;
-  border: none;
-  display: block;
+  min-height: 100vh;
   background: #0a0a0c;
-  overflow: hidden;
+}
+
+.booker-epk-page__content {
+  width: 100%;
 }
 
 /* Data dashboard */

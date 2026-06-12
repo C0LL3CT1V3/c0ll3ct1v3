@@ -18,7 +18,7 @@ from ..schemas.epk_public_schemas import EpkPublicConfig, EpkPublicPatch
 from .epk_media import STREAMING_KEYS, SOCIAL_KEYS, epk_content_hash, media_proxy_url
 from .epk_streaming_logos import streaming_logo_link
 from .epk_preview_token import epk_preview_page_url, mint_epk_preview_token
-from .public_urls import public_epk_url
+from .public_urls import public_epk_url, public_site_origin
 from .artist_service import resolve_artist_by_public_slug, storage_namespace_for_artist
 from .epk_public_config import coerce_epk_public, get_epk_public_raw
 from .media_variants import best_image_variant, url_for_variant
@@ -76,6 +76,28 @@ def _preview_url_for_asset(db: Session, asset: MediaAsset) -> str | None:
         return presigned_get_object(client, ver.storage_key)
     except Exception:
         return None
+
+
+def _same_origin_media_proxy(artist: Artist, asset_id: str) -> str:
+    """API proxy on the artist subdomain (avoids apex cross-origin + srcdoc ORB issues)."""
+    origin = public_site_origin(artist.tenant_slug)
+    return f"{origin}/api/artists/public/{artist.tenant_slug}/epk/media/{asset_id}"
+
+
+def _delivery_url_for_asset(
+    db: Session,
+    artist: Artist,
+    asset: MediaAsset,
+    *,
+    preview_token: str | None = None,
+) -> str:
+    """Prefer direct HTTPS object URLs; fall back to same-origin API proxy."""
+    if preview_token:
+        return media_proxy_url(artist.tenant_slug, asset.id, preview_token=preview_token)
+    direct = _preview_url_for_asset(db, asset)
+    if direct and direct.startswith("https://"):
+        return direct
+    return _same_origin_media_proxy(artist, asset.id)
 
 
 def _youtube_embed_id(url: str) -> str | None:
@@ -180,10 +202,8 @@ def resolve_epk_public(
                 "asset_id": asset.id,
                 "title": asset.title,
                 "asset_type": asset.asset_type,
-                "url": media_proxy_url(
-                    artist.tenant_slug,
-                    asset.id,
-                    preview_token=preview_token,
+                "url": _delivery_url_for_asset(
+                    db, artist, asset, preview_token=preview_token
                 ),
             }
 
@@ -200,10 +220,8 @@ def resolve_epk_public(
                     "asset_id": asset.id,
                     "title": asset.title,
                     "caption": slot.caption,
-                    "url": media_proxy_url(
-                        artist.tenant_slug,
-                        asset.id,
-                        preview_token=preview_token,
+                    "url": _delivery_url_for_asset(
+                        db, artist, asset, preview_token=preview_token
                     ),
                 }
             )
@@ -220,10 +238,8 @@ def resolve_epk_public(
                 {
                     "asset_id": asset.id,
                     "title": slot.title or asset.title,
-                    "url": media_proxy_url(
-                        artist.tenant_slug,
-                        asset.id,
-                        preview_token=preview_token,
+                    "url": _delivery_url_for_asset(
+                        db, artist, asset, preview_token=preview_token
                     ),
                 }
             )
@@ -239,10 +255,8 @@ def resolve_epk_public(
             tech_rider = {
                 "asset_id": asset.id,
                 "title": asset.title,
-                "url": media_proxy_url(
-                    artist.tenant_slug,
-                    asset.id,
-                    preview_token=preview_token,
+                "url": _delivery_url_for_asset(
+                    db, artist, asset, preview_token=preview_token
                 ),
             }
 
@@ -538,13 +552,28 @@ def _build_booker_epk_html(data: dict[str, Any], *, draft: bool = False) -> str:
       margin: 1.5rem 0 1rem;
     }}
     .booker-epk-email a {{ color: #c4a574; }}
+    .booker-epk-streaming-section {{
+      margin: 1.25rem 0 1.75rem;
+    }}
+    .booker-epk-streaming-label {{
+      margin: 0 0 0.75rem;
+      font-family: system-ui, sans-serif;
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.14em;
+      color: #9a958c;
+    }}
     .booker-epk-streaming, .booker-epk-socials {{
       display: flex;
       flex-wrap: wrap;
       gap: 0.65rem 1.25rem;
-      margin: 1.25rem 0;
+      margin: 0;
       font-family: system-ui, sans-serif;
       align-items: center;
+    }}
+    .booker-epk-socials {{
+      margin: 1.25rem 0;
     }}
     .booker-epk-streaming-logo {{
       display: inline-flex;
@@ -584,7 +613,7 @@ def _build_booker_epk_html(data: dict[str, Any], *, draft: bool = False) -> str:
       <p class="booker-epk-sub">Electronic Press Kit</p>
     </header>
     {hero_html}
-    {f'<div class="booker-epk-streaming">{streaming_html}</div>' if streaming_html else ''}
+    {f'<section class="booker-epk-streaming-section"><h2 class="booker-epk-streaming-label">Streaming links</h2><div class="booker-epk-streaming">{streaming_html}</div></section>' if streaming_html else ''}
     <section class="booker-epk-bio">{bio or '<em>Bio coming soon.</em>'}</section>
     {f'<section class="booker-epk-gallery">{photos_html}</section>' if photos_html else ''}
     {f'<section class="booker-epk-tracks">{audio_html}</section>' if audio_html else ''}
