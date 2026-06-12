@@ -21,6 +21,37 @@ def run_manager_schema_migrations(engine: Engine) -> None:
                     "ALTER TABLE artists ADD COLUMN allow_training_contribution BOOLEAN NOT NULL DEFAULT FALSE"
                 )
             )
+        if "storage_namespace" not in artist_cols:
+            connection.execute(text("ALTER TABLE artists ADD COLUMN storage_namespace VARCHAR(64)"))
+            connection.execute(
+                text("UPDATE artists SET storage_namespace = tenant_slug WHERE storage_namespace IS NULL")
+            )
+            connection.execute(
+                text(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS ix_artists_storage_namespace "
+                    "ON artists (storage_namespace) WHERE storage_namespace IS NOT NULL"
+                )
+            )
+
+        if not inspector.has_table("artist_slug_aliases"):
+            connection.execute(
+                text(
+                    """
+                    CREATE TABLE artist_slug_aliases (
+                        id SERIAL PRIMARY KEY,
+                        artist_id INTEGER NOT NULL REFERENCES artists(id) ON DELETE CASCADE,
+                        slug VARCHAR(64) NOT NULL UNIQUE,
+                        created_at TIMESTAMPTZ DEFAULT NOW()
+                    )
+                    """
+                )
+            )
+            connection.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS ix_artist_slug_aliases_artist_id "
+                    "ON artist_slug_aliases (artist_id)"
+                )
+            )
 
         if not inspector.has_table("manager_threads"):
             connection.execute(

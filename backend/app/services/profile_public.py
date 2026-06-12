@@ -8,6 +8,7 @@ from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
 from ..models.artist import Artist
+from .artist_service import resolve_artist_by_public_slug
 from ..schemas.artist_schemas import coerce_epk_config
 from .epk_draft import get_or_init_draft
 from .epk_html_draft import is_html_draft, render_draft_html
@@ -34,7 +35,7 @@ def is_profile_published(artist: Artist) -> bool:
 
 
 def get_public_profile(db: Session, tenant_slug: str) -> dict[str, Any]:
-    artist = db.query(Artist).filter(Artist.tenant_slug == tenant_slug).first()
+    artist = resolve_artist_by_public_slug(db, tenant_slug)
     if not artist:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Profile not found.")
 
@@ -85,7 +86,7 @@ def get_public_profile(db: Session, tenant_slug: str) -> dict[str, Any]:
 
 
 def render_public_profile_html(db: Session, tenant_slug: str) -> str:
-    artist = db.query(Artist).filter(Artist.tenant_slug == tenant_slug).first()
+    artist = resolve_artist_by_public_slug(db, tenant_slug)
     if not artist:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Profile not found.")
     if not is_profile_published(artist):

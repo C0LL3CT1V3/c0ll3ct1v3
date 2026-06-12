@@ -147,7 +147,9 @@ def render_draft_html(db, artist, draft: dict) -> str:
     if not is_html_draft(draft):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Draft is not html_v1 format.")
     bindings = draft.get("asset_bindings") or {}
-    url_map = resolve_binding_urls(db, artist.tenant_slug, bindings)
+    from .artist_service import storage_namespace_for_artist
+
+    url_map = resolve_binding_urls(db, storage_namespace_for_artist(artist), bindings)
     html = inject_asset_bindings(draft.get("html") or "", url_map)
     css = draft.get("css") or ""
     title = artist.display_name or "EPK Preview"

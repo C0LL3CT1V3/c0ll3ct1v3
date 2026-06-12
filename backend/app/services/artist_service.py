@@ -7,7 +7,7 @@ import re
 from sqlalchemy.orm import Session
 
 from ..config import settings
-from ..models.artist import Artist, default_epk_config
+from ..models.artist import Artist, ArtistSlugAlias, default_epk_config
 from ..models.media import MediaAsset
 from ..models.user import User
 
@@ -87,6 +87,46 @@ def _is_seed_artist(artist: Artist) -> bool:
     return (artist.auth0_sub or "").startswith("seed:")
 
 
+def storage_namespace_for_artist(artist: Artist) -> str:
+    """Stable workbench/S3 prefix for this artist (does not follow public slug changes)."""
+    ns = (artist.storage_namespace or artist.tenant_slug or "").strip().lower()
+    if not ns:
+        raise ValueError("Artist has no storage namespace.")
+    return ns
+
+
+def _ensure_storage_namespace(db: Session, artist: Artist) -> str:
+    ns = (artist.storage_namespace or "").strip().lower()
+    if not ns:
+        artist.storage_namespace = artist.tenant_slug
+        db.flush()
+        return artist.storage_namespace
+    return ns
+
+
+def _record_slug_alias(db: Session, artist_id: int, slug: str) -> None:
+    s = slug.strip().lower()
+    if not s:
+        return
+    exists = db.query(ArtistSlugAlias).filter(ArtistSlugAlias.slug == s).first()
+    if exists:
+        return
+    db.add(ArtistSlugAlias(artist_id=artist_id, slug=s))
+
+
+def rebind_media_to_storage_namespace(db: Session, artist: Artist) -> None:
+    """Heal media rows after a public slug change (assets stay on storage_namespace)."""
+    ns = _ensure_storage_namespace(db, artist)
+    sub = (artist.auth0_sub or "").strip()
+    if not sub:
+        return
+    db.query(MediaAsset).filter(
+        MediaAsset.created_by == sub,
+        MediaAsset.is_deleted.is_(False),
+        MediaAsset.tenant_slug != ns,
+    ).update({MediaAsset.tenant_slug: ns}, synchronize_session=False)
+
+
 def claim_tenant_slug(
     db: Session,
     *,
@@ -94,9 +134,11 @@ def claim_tenant_slug(
     user: User,
     new_slug: str,
 ) -> Artist:
-    """Assign tenant_slug, claiming a seed row when the slug is held by seed:*."""
+    """Assign public tenant_slug, claiming a seed row when the slug is held by seed:*."""
     slug = validate_tenant_slug(new_slug)
+    _ensure_storage_namespace(db, artist)
     if artist.tenant_slug == slug:
+        rebind_media_to_storage_namespace(db, artist)
         return artist
 
     conflict = (
@@ -106,10 +148,16 @@ def claim_tenant_slug(
         if _is_seed_artist(conflict) and user_may_claim_default_tenant_workspace(user):
             if artist.id != conflict.id:
                 _merge_stray_artist_into_canonical(db, dup=artist, canonical=conflict, user=user)
+            _ensure_storage_namespace(db, conflict)
+            rebind_media_to_storage_namespace(db, conflict)
             return conflict
         raise ValueError("tenant_slug already in use.")
 
+    old_slug = artist.tenant_slug
+    if old_slug and old_slug != slug:
+        _record_slug_alias(db, artist.id, old_slug)
     artist.tenant_slug = slug
+    rebind_media_to_storage_namespace(db, artist)
     return artist
 
 
@@ -128,16 +176,30 @@ def get_artist_by_slug(db: Session, tenant_slug: str) -> Artist | None:
     return db.query(Artist).filter(Artist.tenant_slug == tenant_slug).first()
 
 
+def resolve_artist_by_public_slug(db: Session, slug: str) -> Artist | None:
+    """Resolve artist by current public slug or a former slug alias."""
+    s = slug.strip().lower()
+    artist = get_artist_by_slug(db, s)
+    if artist:
+        return artist
+    alias = db.query(ArtistSlugAlias).filter(ArtistSlugAlias.slug == s).first()
+    if not alias:
+        return None
+    return db.query(Artist).filter(Artist.id == alias.artist_id).first()
+
+
 def _merge_stray_artist_into_canonical(db: Session, *, dup: Artist, canonical: Artist, user: User) -> None:
     """Move assets keyed by Auth0 sub onto canonical tenant; delete duplicate Artist row."""
     sub = user.auth0_sub or ""
-    wrong_slug = dup.tenant_slug
-    canon_slug = canonical.tenant_slug
+    canon_ns = _ensure_storage_namespace(db, canonical)
+    if not canonical.storage_namespace:
+        canonical.storage_namespace = canon_ns
+    wrong_ns = _ensure_storage_namespace(db, dup)
     db.query(MediaAsset).filter(
         MediaAsset.created_by == sub,
-        MediaAsset.tenant_slug == wrong_slug,
+        MediaAsset.tenant_slug == wrong_ns,
         MediaAsset.is_deleted.is_(False),
-    ).update({MediaAsset.tenant_slug: canon_slug}, synchronize_session=False)
+    ).update({MediaAsset.tenant_slug: canon_ns}, synchronize_session=False)
     db.delete(dup)
     db.flush()
     canonical.auth0_sub = sub
@@ -193,6 +255,10 @@ def get_or_create_artist(db: Session, user: User) -> Artist:
             return canonical
 
     if existing:
+        _ensure_storage_namespace(db, existing)
+        rebind_media_to_storage_namespace(db, existing)
+        db.commit()
+        db.refresh(existing)
         return existing
 
     email = (user.email or "").lower()
@@ -212,6 +278,7 @@ def get_or_create_artist(db: Session, user: User) -> Artist:
     artist = Artist(
         auth0_sub=sub,
         tenant_slug=slug,
+        storage_namespace=slug,
         display_name=display,
         epk_config=default_epk_config(),
     )
@@ -222,5 +289,11 @@ def get_or_create_artist(db: Session, user: User) -> Artist:
 
 
 def tenant_slug_for_user(db: Session, user: User) -> str:
-    """Resolved tenant for storage + API scoping (provisions artist if needed)."""
+    """Public subdomain slug for URLs and published EPK."""
     return get_or_create_artist(db, user).tenant_slug
+
+
+def storage_namespace_for_user(db: Session, user: User) -> str:
+    """Immutable Vault/S3 workspace prefix (provisions artist if needed)."""
+    artist = get_or_create_artist(db, user)
+    return storage_namespace_for_artist(artist)

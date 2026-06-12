@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session, joinedload
 from ..config import settings
 from ..models.artist import Artist
 from ..models.media import MediaAsset, MediaVersion
+from .artist_service import storage_namespace_for_artist
 from .epk_public_config import get_epk_public_raw
 from .spaces_storage import get_s3_client, presigned_get_object
 
@@ -86,7 +87,7 @@ def redirect_epk_asset(
         db.query(MediaAsset)
         .filter(
             MediaAsset.id == asset_id,
-            MediaAsset.tenant_slug == artist.tenant_slug,
+            MediaAsset.tenant_slug == storage_namespace_for_artist(artist),
             MediaAsset.is_deleted.is_(False),
         )
         .first()

@@ -2314,9 +2314,12 @@
 
 .booker-epk-iframe {
   width: 100%;
-  min-height: 80vh;
+  height: auto;
+  min-height: 0;
   border: none;
-  background: #0f0f12;
+  display: block;
+  background: #0a0a0c;
+  overflow: hidden;
 }
 
 /* Data dashboard */

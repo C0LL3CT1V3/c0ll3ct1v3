@@ -123,7 +123,9 @@ def evaluate_epk_completeness(db: Session, artist: Artist) -> dict[str, Any]:
     """Profile readiness for a fan-facing musician page."""
     cfg = coerce_epk_config(artist.epk_config)
     draft = artist.epk_draft if isinstance(artist.epk_draft, dict) else get_or_init_draft(artist)
-    inventory = _workbench_inventory(db, artist.tenant_slug)
+    from .artist_service import storage_namespace_for_artist
+
+    inventory = _workbench_inventory(db, storage_namespace_for_artist(artist))
     bound = _bound_asset_types(draft, inventory)
     audio_count = max(inventory["audio"], bound["audio"])
     image_count = max(inventory["image"], bound["image"])

@@ -15,7 +15,7 @@ from ...database import get_db
 from ...models.media import MediaAsset, MediaJob, MediaUpload, MediaVariant, MediaVersion
 from ...models.vision import Vision
 from ...models.user import User
-from ...services.artist_service import tenant_slug_for_user
+from ...services.artist_service import storage_namespace_for_user
 from ...services.media_variants import best_image_variant, url_for_variant
 from ...schemas.media_schemas import (
     AssetDetail,
@@ -81,7 +81,7 @@ def _require_storage() -> None:
 
 
 def _assert_asset_in_user_workspace(asset: MediaAsset, db: Session, user: User) -> None:
-    allowed = tenant_slug_for_user(db, user)
+    allowed = storage_namespace_for_user(db, user)
     if asset.tenant_slug != allowed:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Asset not found.")
 
@@ -91,7 +91,7 @@ def _tenant_slug(body: UploadInitBody, db: Session, current_user: User) -> str:
 
 
 def _resolve_tenant_slug(requested: str | None, db: Session, current_user: User) -> str:
-    allowed = tenant_slug_for_user(db, current_user)
+    allowed = storage_namespace_for_user(db, current_user)
     if requested:
         slug = requested.strip().lower()
         if slug != allowed:
@@ -431,7 +431,7 @@ def get_workbench(
     current_user: User = Depends(get_current_user),
 ) -> WorkbenchOut:
     """Workbench assets and vision groups for the portal."""
-    workspace = tenant_slug_for_user(db, current_user)
+    workspace = storage_namespace_for_user(db, current_user)
     _heal_stuck_processing_assets(db, workspace)
     visions = (
         db.query(Vision)
@@ -460,7 +460,7 @@ def list_assets(
     status_filter: str | None = None,
     asset_type: str | None = None,
 ) -> list[AssetListItem]:
-    workspace = tenant_slug_for_user(db, current_user)
+    workspace = storage_namespace_for_user(db, current_user)
     _heal_stuck_processing_assets(db, workspace)
     q = db.query(MediaAsset).filter(
         MediaAsset.is_deleted.is_(False),
@@ -517,7 +517,7 @@ def create_reference_url(
     current_user: User = Depends(get_current_user),
 ) -> AssetDetail:
     """Add an external URL as a vision reference (no upload)."""
-    workspace = tenant_slug_for_user(db, current_user)
+    workspace = storage_namespace_for_user(db, current_user)
     asset = create_url_reference_asset(
         db,
         tenant_slug=workspace,
@@ -603,7 +603,7 @@ def list_visions(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> list[VisionOut]:
-    workspace = tenant_slug_for_user(db, current_user)
+    workspace = storage_namespace_for_user(db, current_user)
     return (
         db.query(Vision)
         .filter(Vision.tenant_slug == workspace)
@@ -618,7 +618,7 @@ def create_vision(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> VisionOut:
-    workspace = tenant_slug_for_user(db, current_user)
+    workspace = storage_namespace_for_user(db, current_user)
     max_order = (
         db.query(Vision.sort_order)
         .filter(Vision.tenant_slug == workspace)
@@ -640,7 +640,7 @@ def update_vision(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> VisionOut:
-    workspace = tenant_slug_for_user(db, current_user)
+    workspace = storage_namespace_for_user(db, current_user)
     row = db.query(Vision).filter(Vision.id == vision_id, Vision.tenant_slug == workspace).first()
     if not row:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Vision not found.")
@@ -659,7 +659,7 @@ def get_vision_pack_route(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> VisionPackOut:
-    workspace = tenant_slug_for_user(db, current_user)
+    workspace = storage_namespace_for_user(db, current_user)
     return VisionPackOut(**get_vision_pack(db, vision_id, workspace))
 
 
@@ -673,7 +673,7 @@ def delete_vision(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> Response:
-    workspace = tenant_slug_for_user(db, current_user)
+    workspace = storage_namespace_for_user(db, current_user)
     row = db.query(Vision).filter(Vision.id == vision_id, Vision.tenant_slug == workspace).first()
     if not row:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Vision not found.")

@@ -19,6 +19,7 @@ from .epk_media import STREAMING_KEYS, SOCIAL_KEYS, epk_content_hash, media_prox
 from .epk_streaming_logos import streaming_logo_link
 from .epk_preview_token import epk_preview_page_url, mint_epk_preview_token
 from .public_urls import public_epk_url
+from .artist_service import resolve_artist_by_public_slug, storage_namespace_for_artist
 from .epk_public_config import coerce_epk_public, get_epk_public_raw
 from .media_variants import best_image_variant, url_for_variant
 from .spaces_storage import get_s3_client, presigned_get_object
@@ -41,7 +42,7 @@ def _assert_workbench_asset(db: Session, artist: Artist, asset_id: str) -> Media
         db.query(MediaAsset)
         .filter(
             MediaAsset.id == asset_id,
-            MediaAsset.tenant_slug == artist.tenant_slug,
+            MediaAsset.tenant_slug == storage_namespace_for_artist(artist),
             MediaAsset.is_deleted.is_(False),
             MediaAsset.storage_region == "workbench",
         )
@@ -277,7 +278,7 @@ def get_my_epk_public(db: Session, artist: Artist) -> dict[str, Any]:
 
 
 def get_public_booker_epk(db: Session, tenant_slug: str) -> dict[str, Any]:
-    artist = db.query(Artist).filter(Artist.tenant_slug == tenant_slug).first()
+    artist = resolve_artist_by_public_slug(db, tenant_slug)
     if not artist:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="EPK not found.")
 
@@ -412,12 +413,16 @@ def _build_booker_epk_html(data: dict[str, Any], *, draft: bool = False) -> str:
   <title>{name} — Press Kit</title>
   <style>
     * {{ box-sizing: border-box; }}
+    html, body {{
+      height: auto;
+      min-height: 0;
+    }}
     body {{
       font-family: Georgia, "Times New Roman", serif;
       background: #0a0a0c;
       color: #eceae6;
       margin: 0;
-      padding: 2rem 1.25rem 3rem;
+      padding: 2rem 1.25rem 1.5rem;
     }}
     .booker-epk-wrap {{ max-width: 920px; margin: 0 auto; }}
     .booker-epk-draft-banner {{
@@ -603,7 +608,7 @@ def create_epk_preview_link(db: Session, artist: Artist) -> str:
 
 
 def render_booker_epk_html(db: Session, tenant_slug: str) -> str:
-    artist = db.query(Artist).filter(Artist.tenant_slug == tenant_slug).first()
+    artist = resolve_artist_by_public_slug(db, tenant_slug)
     if not artist:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="EPK not found.")
     cfg = artist.epk_config if isinstance(artist.epk_config, dict) else {}

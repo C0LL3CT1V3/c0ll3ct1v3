@@ -15,7 +15,7 @@ from ...database import get_db
 from ...models.media import MediaAsset, MediaVersion
 from ...models.user import User
 from ...schemas.audience_schemas import AudienceMapReport
-from ...services.artist_service import get_or_create_artist, tenant_slug_for_user
+from ...services.artist_service import get_or_create_artist, storage_namespace_for_user
 from ...services.audience_map import (
     audience_profile_from_cache,
     build_audience_map,
@@ -28,7 +28,7 @@ router = APIRouter(prefix="/music", tags=["music"])
 
 
 def _assert_asset_workspace(asset: MediaAsset, db: Session, user: User) -> None:
-    allowed = tenant_slug_for_user(db, user)
+    allowed = storage_namespace_for_user(db, user)
     if asset.tenant_slug != allowed:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Asset not found.")
 

@@ -20,7 +20,7 @@ from ...schemas.cloud_schemas import (
     CloudProviderStatus,
     OAuthAuthorizeOut,
 )
-from ...services.artist_service import get_or_create_artist, tenant_slug_for_user
+from ...services.artist_service import get_or_create_artist, storage_namespace_for_user
 from ...services.cloud_dropbox import download_dropbox_file, list_dropbox_files
 from ...services.cloud_google import download_google_file, list_google_files
 from ...services.cloud_import_media import import_bytes_to_workbench
@@ -117,7 +117,7 @@ async def google_import(
     current_user: User = Depends(get_current_user),
 ) -> CloudImportOut:
     artist = _artist(db, current_user)
-    tenant = tenant_slug_for_user(db, current_user)
+    tenant = storage_namespace_for_user(db, current_user)
     name, mime, data = await download_google_file(db, artist.id, body.file_id)
     asset = import_bytes_to_workbench(
         db,
@@ -191,7 +191,7 @@ async def dropbox_import(
     current_user: User = Depends(get_current_user),
 ) -> CloudImportOut:
     artist = _artist(db, current_user)
-    tenant = tenant_slug_for_user(db, current_user)
+    tenant = storage_namespace_for_user(db, current_user)
     name, mime, data = await download_dropbox_file(db, artist.id, body.path)
     asset = import_bytes_to_workbench(
         db,

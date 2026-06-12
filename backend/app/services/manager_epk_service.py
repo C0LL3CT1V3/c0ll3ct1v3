@@ -12,6 +12,7 @@ from ..config import settings
 from ..models.artist import Artist
 from ..models.manager import EpkIteration, ManagerMessage, ManagerThread
 from ..models.media import MediaAsset, MediaVersion
+from ..services.artist_service import storage_namespace_for_artist
 from ..services.epk_completeness import completeness_context_block, evaluate_epk_completeness
 from ..services.epk_component_registry import get_component_map, resolve_annotations
 from ..services.epk_draft import get_or_init_draft
@@ -282,7 +283,7 @@ def build_preview_payload(db: Session, artist: Artist, design: dict) -> dict[str
     assets = (
         db.query(MediaAsset)
         .filter(
-            MediaAsset.tenant_slug == artist.tenant_slug,
+            MediaAsset.tenant_slug == storage_namespace_for_artist(artist),
             MediaAsset.is_deleted.is_(False),
             MediaAsset.storage_region == "workbench",
         )
@@ -370,7 +371,7 @@ def save_draft(db: Session, artist: Artist, design: dict) -> None:
 def build_agent_context_block(db: Session, artist: Artist) -> str:
     """Compact context for the chat agent (no new tools)."""
     draft = get_or_init_draft(artist)
-    wb = workbench_summary(db, artist.tenant_slug)
+    wb = workbench_summary(db, storage_namespace_for_artist(artist))
     components = get_component_map(draft)
     section_keys = [c.get("component_id") for c in components if c.get("component_id")]
     hero = next((b for b in draft.get("layout") or [] if b.get("id") == "hero"), {})
@@ -407,7 +408,7 @@ def apply_epk_update_from_chat(
         artist.epk_draft = draft_before
         db.commit()
 
-    summary = workbench_summary(db, artist.tenant_slug)
+    summary = workbench_summary(db, storage_namespace_for_artist(artist))
     epk = artist.epk_config or {}
     system = build_system_prompt(
         artist.display_name,
@@ -437,7 +438,7 @@ def apply_epk_update_from_chat(
     db.commit()
     db.refresh(iteration)
 
-    upload_url, storage_key = _screenshot_presign(artist.tenant_slug, iteration.id)
+    upload_url, storage_key = _screenshot_presign(storage_namespace_for_artist(artist), iteration.id)
     if storage_key:
         iteration.screenshot_storage_key = storage_key
         db.commit()
@@ -489,7 +490,7 @@ def iterate_epk(
         artist.epk_draft = draft_before
         db.commit()
 
-    summary = workbench_summary(db, artist.tenant_slug)
+    summary = workbench_summary(db, storage_namespace_for_artist(artist))
     epk = artist.epk_config or {}
     system = build_system_prompt(
         artist.display_name,
@@ -519,7 +520,7 @@ def iterate_epk(
     db.commit()
     db.refresh(iteration)
 
-    upload_url, storage_key = _screenshot_presign(artist.tenant_slug, iteration.id)
+    upload_url, storage_key = _screenshot_presign(storage_namespace_for_artist(artist), iteration.id)
     if storage_key:
         iteration.screenshot_storage_key = storage_key
         db.commit()
@@ -592,7 +593,7 @@ def refine_iteration(db: Session, artist: Artist, parent: EpkIteration) -> tuple
 
     if is_html_draft(draft_before):
         bindings = draft_before.get("asset_bindings") or {}
-        asset_urls = resolve_binding_urls(db, artist.tenant_slug, bindings)
+        asset_urls = resolve_binding_urls(db, storage_namespace_for_artist(artist), bindings)
         result = refine_epk_html_from_annotations(
             system,
             html=draft_before.get("html") or "",
@@ -644,7 +645,7 @@ def refine_iteration(db: Session, artist: Artist, parent: EpkIteration) -> tuple
     db.commit()
     db.refresh(child)
 
-    upload_url, storage_key = _screenshot_presign(artist.tenant_slug, child.id)
+    upload_url, storage_key = _screenshot_presign(storage_namespace_for_artist(artist), child.id)
     if storage_key:
         child.screenshot_storage_key = storage_key
         db.commit()

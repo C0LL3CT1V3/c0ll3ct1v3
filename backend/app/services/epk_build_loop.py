@@ -15,6 +15,7 @@ from ..services.epk_html_draft import (
     draft_content_hash,
     normalize_html_draft,
 )
+from ..services.artist_service import storage_namespace_for_artist
 from ..services.epk_completeness import evaluate_epk_completeness
 from ..services.epk_font_analysis import detect_fonts_from_vision_pack
 from ..services.epk_playwright import capture_sim_screenshot
@@ -54,7 +55,7 @@ def build_epk_from_vision(
     vision_id: str,
     spec: str,
 ) -> dict[str, Any]:
-    pack = get_vision_pack(db, vision_id, artist.tenant_slug)
+    pack = get_vision_pack(db, vision_id, storage_namespace_for_artist(artist))
     font_palette = detect_fonts_from_vision_pack(pack)
     epk_readiness = evaluate_epk_completeness(db, artist)
     pack["font_palette"] = font_palette
@@ -150,7 +151,7 @@ def build_epk_from_vision(
     db.refresh(iteration)
 
     if screenshot_png:
-        screenshot_key = _upload_screenshot(artist.tenant_slug, iteration.id, screenshot_png)
+        screenshot_key = _upload_screenshot(storage_namespace_for_artist(artist), iteration.id, screenshot_png)
         if screenshot_key:
             iteration.screenshot_storage_key = screenshot_key
             db.commit()

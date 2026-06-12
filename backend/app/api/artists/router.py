@@ -18,7 +18,12 @@ from ...schemas.artist_schemas import (
 )
 from ...schemas.audience_schemas import AudienceMapReport
 from ...schemas.epk_public_schemas import EpkPublicOut, EpkPublicPatch, PublicBookerEpkOut
-from ...services.artist_service import claim_tenant_slug, get_or_create_artist
+from ...services.artist_service import (
+    claim_tenant_slug,
+    get_or_create_artist,
+    rebind_media_to_storage_namespace,
+    resolve_artist_by_public_slug,
+)
 from ...services.epk_pdf import generate_booker_epk_pdf
 from ...services.epk_media import collect_epk_asset_ids, epk_content_hash, redirect_epk_asset
 from ...services.epk_preview_token import verify_epk_preview_token
@@ -120,6 +125,8 @@ def patch_my_profile(
             if msg == "tenant_slug already in use.":
                 raise HTTPException(status.HTTP_409_CONFLICT, detail=msg) from exc
             raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=msg) from exc
+    else:
+        rebind_media_to_storage_namespace(db, artist)
 
     if body.epk_config is not None:
         merged = {**(artist.epk_config or {}), **body.epk_config.model_dump()}
@@ -222,7 +229,7 @@ def public_epk_media(
     asset_id: str,
     db: Session = Depends(get_db),
 ) -> RedirectResponse:
-    artist = db.query(Artist).filter(Artist.tenant_slug == tenant_slug).first()
+    artist = resolve_artist_by_public_slug(db, tenant_slug)
     if not artist:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="EPK not found.")
     raw = artist.epk_config if isinstance(artist.epk_config, dict) else {}
