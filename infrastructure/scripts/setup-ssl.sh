@@ -41,14 +41,55 @@ fi
 
 mkdir -p "$SSL_DIR"
 
+imds_role_name() {
+    local token role
+    token="$(curl -sf -X PUT "http://169.254.169.254/latest/api/token" \
+        -H "X-aws-ec2-metadata-token-ttl-seconds: 60" 2>/dev/null)" || return 1
+    role="$(curl -sf -H "X-aws-ec2-metadata-token: $token" \
+        "http://169.254.169.254/latest/meta-data/iam/security-credentials/" 2>/dev/null)" || return 1
+    [ -n "$role" ] || return 1
+    printf '%s' "$role"
+}
+
+aws_identity_via_instance_role() {
+    env -u AWS_ACCESS_KEY_ID -u AWS_SECRET_ACCESS_KEY -u AWS_SESSION_TOKEN \
+        -u AWS_PROFILE -u AWS_DEFAULT_PROFILE \
+        aws sts get-caller-identity "$@" 2>/dev/null
+}
+
 log_info "Checking Route 53 / AWS credentials..."
-if ! aws sts get-caller-identity &>/dev/null; then
+if ! command -v aws &>/dev/null; then
+    log_info "Installing AWS CLI..."
+    sudo apt-get install -y awscli
+fi
+
+ROLE_NAME="$(imds_role_name || true)"
+if [ -n "$ROLE_NAME" ]; then
+    log_info "EC2 instance role via IMDSv2: $ROLE_NAME"
+fi
+
+CURRENT_ARN="$(aws sts get-caller-identity --query Arn --output text 2>/dev/null || true)"
+if [[ "$CURRENT_ARN" == *":root" ]]; then
+    log_warn "~/.aws/credentials is using the IAM root user, not the EC2 instance role."
+    log_warn "Certbot will use the instance role (c0ll3ct1v3-ec2-role) for Route 53."
+    log_warn "Consider removing static keys from ~/.aws/credentials on this host."
+elif IDENTITY="$(aws_identity_via_instance_role --output text 2>/dev/null)"; then
+    log_info "AWS credentials OK ($IDENTITY)"
+elif [ -n "$ROLE_NAME" ]; then
+    log_warn "Instance role is attached; continuing (Certbot will use IMDS)."
+    if [ -n "${AWS_ACCESS_KEY_ID:-}" ] || [ -n "${AWS_PROFILE:-}" ]; then
+        log_warn "Unset AWS_ACCESS_KEY_ID / AWS_PROFILE in your shell — they override the instance role."
+    fi
+else
     log_error "AWS credentials not available on this host."
-    log_error "Attach an EC2 instance role with Route 53 permissions, or configure AWS CLI."
-    log_error "See infrastructure/scripts/aws-route53-certbot-iam-policy.json"
+    log_error "This script must run on EC2 with IMDSv2 (HttpTokens=required on this instance)."
+    log_error "Verify on EC2:"
+    log_error '  TOKEN=$(curl -sX PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 60")'
+    log_error '  curl -sH "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/iam/security-credentials/'
+    log_error "If empty, re-attach profile from hermes:"
+    log_error "  ./infrastructure/scripts/attach-route53-certbot-iam.sh i-08e02bc6466d72442"
     exit 1
 fi
-log_info "AWS credentials OK"
 
 log_info "Verifying DNS (apex + wildcard should resolve to this server)..."
 PUBLIC_IP="$(curl -fsS ifconfig.me 2>/dev/null || curl -fsS ipinfo.io/ip 2>/dev/null || true)"
@@ -72,8 +113,17 @@ if command -v ufw &> /dev/null; then
     sudo ufw allow 443/tcp 2>/dev/null || true
 fi
 
+# Force boto3/Certbot to use the EC2 instance role, not ~/.aws/credentials (often root keys).
+CERTBOT_AWS_ENV=(
+    env
+    -u AWS_ACCESS_KEY_ID -u AWS_SECRET_ACCESS_KEY -u AWS_SESSION_TOKEN
+    -u AWS_PROFILE -u AWS_DEFAULT_PROFILE
+    AWS_SHARED_CREDENTIALS_FILE=/dev/null
+    AWS_CONFIG_FILE=/dev/null
+)
+
 log_info "Obtaining wildcard certificate from Let's Encrypt (Route 53 DNS challenge)..."
-sudo certbot certonly \
+sudo "${CERTBOT_AWS_ENV[@]}" certbot certonly \
     --dns-route53 \
     --non-interactive \
     --agree-tos \
@@ -113,7 +163,7 @@ EOF
 sudo chmod +x "$RENEWAL_HOOK"
 
 log_info "Testing certificate renewal (dry run)..."
-if sudo certbot renew --dry-run; then
+if sudo "${CERTBOT_AWS_ENV[@]}" certbot renew --dry-run; then
     log_info "Auto-renewal dry run succeeded"
 else
     log_warn "Auto-renewal dry run failed; certs are installed but check IAM + Route 53 permissions"
