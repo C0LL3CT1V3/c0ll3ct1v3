@@ -1,0 +1,13 @@
+<% content_for :title, "IG mock" %>
+<h1 class="font-display text-3xl">Instagram mock</h1>
+<p class="mt-2 text-sm text-paper-dim">Pretend a comment arrived. This mints a tokenized link the way a DM would.</p>
+
+<%= form_with url: dev_ig_comment_path, class: "mt-6 space-y-4" do %>
+  <select name="market_id" class="w-full px-3 py-3">
+    <% @markets.each do |market| %>
+      <option value="<%= market.id %>"><%= market.artist.name %> — <%= market.question %></option>
+    <% end %>
+  </select>
+  <input type="text" name="handle" placeholder="ig handle" class="w-full px-3 py-3">
+  <button class="w-full bg-paper py-3 font-display text-ink">Fake comment</button>
+<% end %>

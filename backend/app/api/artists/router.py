@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
-from fastapi.responses import HTMLResponse, RedirectResponse, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from sqlalchemy.orm import Session
 
 from ..auth import get_current_user
@@ -18,6 +18,8 @@ from ...schemas.artist_schemas import (
 )
 from ...schemas.audience_schemas import AudienceMapReport
 from ...schemas.epk_public_schemas import EpkPublicOut, EpkPublicPatch, PublicBookerEpkOut
+from ...schemas.homebase_schemas import HomebaseOut, HomebasePatch, PublicHomebaseOut
+from ...schemas.payments_schemas import CatalogOut, CheckoutOut, CheckoutRequest
 from ...services.artist_service import (
     claim_tenant_slug,
     get_or_create_artist,
@@ -25,7 +27,7 @@ from ...services.artist_service import (
     resolve_artist_by_public_slug,
 )
 from ...services.epk_pdf import generate_booker_epk_pdf
-from ...services.epk_media import collect_epk_asset_ids, epk_content_hash, redirect_epk_asset
+from ...services.epk_media import collect_epk_asset_ids, epk_content_hash, is_machine_request, redirect_epk_asset
 from ...services.epk_preview_token import verify_epk_preview_token
 from ...services.epk_public import (
     create_epk_preview_link,
@@ -38,6 +40,20 @@ from ...services.epk_public import (
     resolve_epk_public,
 )
 from ...services.epk_public_config import coerce_epk_public, get_epk_public_raw
+from ...services.homebase import (
+    collect_homebase_asset_ids,
+    get_homebase_raw,
+    get_my_homebase,
+    get_public_homebase,
+    patch_homebase,
+    publish_homebase,
+)
+from ...services.payments import (
+    create_public_checkout,
+    get_my_catalog,
+    get_public_catalog,
+)
+from ...services.attestation_service import consent_menu
 from ...services.profile_public import get_public_profile, render_public_profile_html
 
 router = APIRouter(prefix="/artists", tags=["artists"])
@@ -77,9 +93,55 @@ def get_public_booker_epk_page(
     return HTMLResponse(content=html, headers={"Cache-Control": "public, max-age=60"})
 
 
+@router.get("/public/{tenant_slug}/homebase", response_model=PublicHomebaseOut)
+def get_public_homebase_route(
+    tenant_slug: str,
+    db: Session = Depends(get_db),
+) -> PublicHomebaseOut:
+    return PublicHomebaseOut(**get_public_homebase(db, tenant_slug))
+
+
+@router.get("/public/{tenant_slug}/homebase/media/{asset_id}")
+def public_homebase_media(
+    tenant_slug: str,
+    asset_id: str,
+    db: Session = Depends(get_db),
+) -> RedirectResponse:
+    artist = resolve_artist_by_public_slug(db, tenant_slug)
+    if not artist:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Homebase not found.")
+    raw = get_homebase_raw(artist)
+    if not (isinstance(raw, dict) and raw.get("published")):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Homebase not published.")
+    return redirect_epk_asset(
+        db,
+        artist=artist,
+        asset_id=asset_id,
+        allowed_ids=collect_homebase_asset_ids(raw),
+    )
+
+
+@router.get("/public/{tenant_slug}/catalog", response_model=CatalogOut)
+def get_public_catalog_route(
+    tenant_slug: str,
+    db: Session = Depends(get_db),
+) -> CatalogOut:
+    return CatalogOut(**get_public_catalog(db, tenant_slug))
+
+
+@router.post("/public/{tenant_slug}/checkout", response_model=CheckoutOut)
+def post_public_checkout(
+    tenant_slug: str,
+    body: CheckoutRequest,
+    db: Session = Depends(get_db),
+) -> CheckoutOut:
+    return CheckoutOut(**create_public_checkout(db, tenant_slug, body))
+
+
 def _to_out(artist) -> ArtistProfileOut:
     raw = artist.epk_config if isinstance(artist.epk_config, dict) else {}
     epk_public = raw.get("epk_public") if isinstance(raw.get("epk_public"), dict) else {}
+    homebase = raw.get("homebase") if isinstance(raw.get("homebase"), dict) else {}
     return ArtistProfileOut(
         id=artist.id,
         tenant_slug=artist.tenant_slug,
@@ -87,6 +149,7 @@ def _to_out(artist) -> ArtistProfileOut:
         epk_config=coerce_epk_config(raw),
         profile_published=bool(raw.get("profile_published")),
         epk_public_published=bool(raw.get("epk_public_published") or epk_public.get("published")),
+        homebase_published=bool(homebase.get("published")),
         epk_public=epk_public,
     )
 
@@ -170,6 +233,45 @@ def publish_my_epk_public_route(
     return EpkPublicOut(**data)
 
 
+@router.get("/me/homebase", response_model=HomebaseOut)
+def get_my_homebase_route(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> HomebaseOut:
+    artist = get_or_create_artist(db, current_user)
+    return HomebaseOut(**get_my_homebase(artist))
+
+
+@router.patch("/me/homebase", response_model=HomebaseOut)
+def patch_my_homebase_route(
+    body: HomebasePatch,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> HomebaseOut:
+    artist = get_or_create_artist(db, current_user)
+    patch_homebase(db, artist, body)
+    return HomebaseOut(**get_my_homebase(artist))
+
+
+@router.post("/me/homebase/publish", response_model=HomebaseOut)
+def publish_my_homebase_route(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> HomebaseOut:
+    artist = get_or_create_artist(db, current_user)
+    publish_homebase(db, artist)
+    return HomebaseOut(**get_my_homebase(artist))
+
+
+@router.get("/me/catalog", response_model=CatalogOut)
+def get_my_catalog_route(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> CatalogOut:
+    artist = get_or_create_artist(db, current_user)
+    return CatalogOut(**get_my_catalog(db, artist))
+
+
 @router.post("/me/epk-public/preview-link")
 def create_epk_preview_link_route(
     db: Session = Depends(get_db),
@@ -227,8 +329,9 @@ def epk_preview_media(
 def public_epk_media(
     tenant_slug: str,
     asset_id: str,
+    request: Request,
     db: Session = Depends(get_db),
-) -> RedirectResponse:
+):
     artist = resolve_artist_by_public_slug(db, tenant_slug)
     if not artist:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="EPK not found.")
@@ -237,11 +340,18 @@ def public_epk_media(
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="EPK not published.")
     epk = coerce_epk_public(get_epk_public_raw(artist))
     data = resolve_epk_public(db, artist, epk)
+    allowed_ids = collect_epk_asset_ids(data)
+    if is_machine_request(request):
+        if asset_id not in allowed_ids:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Asset not in EPK.")
+        body = consent_menu(db, artist, asset_id)
+        body["settlement"] = "stub"
+        return JSONResponse(status_code=402, content=body)
     return redirect_epk_asset(
         db,
         artist=artist,
         asset_id=asset_id,
-        allowed_ids=collect_epk_asset_ids(data),
+        allowed_ids=allowed_ids,
     )
 
 

@@ -1,0 +1,7 @@
+<% content_for :title, "Open calls" %>
+<h1 class="font-display text-3xl">Open calls</h1>
+<div class="mt-6 space-y-4">
+  <% @markets.each do |market| %>
+    <%= render "markets/card", market: market %>
+  <% end %>
+</div>

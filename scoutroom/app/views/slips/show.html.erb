@@ -1,0 +1,19 @@
+<% content_for :title, "#{@slip.artist.name} slip" %>
+
+<div class="ticket-card overflow-hidden" data-controller="share">
+  <% if @slip.image.attached? %>
+    <%= image_tag @slip.image, class: "w-full", alt: "Prediction slip", data: { share_target: "image" } %>
+  <% end %>
+</div>
+
+<div class="mt-4 flex gap-3">
+  <button data-controller="share" data-action="click->share#share" data-share-title-value="<%= @slip.artist.name %>" data-share-url-value="<%= slip_url(@slip) %>" class="flex-1 bg-paper py-3 text-center font-display text-ink">
+    Share to Stories
+  </button>
+  <% if @slip.image.attached? %>
+    <%= link_to rails_blob_path(@slip.image, disposition: "attachment"), class: "flex-1 border border-rule py-3 text-center text-xs uppercase tracking-widest" do %>
+      Download
+    <% end %>
+  <% end %>
+</div>
+<p class="mt-4 text-center text-[11px] text-paper-dim">Points have no cash value.</p>

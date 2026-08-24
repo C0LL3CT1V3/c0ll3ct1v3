@@ -38,6 +38,13 @@ wheels/
 .installed.cfg
 *.egg
 
+# Playwright
+/test-results/
+/playwright-report/
+/playwright/.cache/
+/blob-report/
+/e2e/.auth/
+
 # Node.js
 node_modules/
 npm-debug.log*

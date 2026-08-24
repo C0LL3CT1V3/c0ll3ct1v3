@@ -3,36 +3,71 @@
  *
  * Dev: http://phillipjames.localhost:3030  → phillipjames
  * Prod: https://phillipjames.c0ll3ct1v3.xyz → phillipjames
- * Apex: http://localhost:3030 or https://c0ll3ct1v3.xyz → ''
+ * Apex: http://localhost:3030, http://127.0.0.1:3030, or https://c0ll3ct1v3.xyz → ''
  */
 
-function isLocalDevHostname(hostname) {
-  const h = hostname.toLowerCase();
-  return h === 'localhost' || h.endsWith('.localhost') || h === '127.0.0.1';
+export const PUBLIC_SITE_DOMAIN = 'c0ll3ct1v3.xyz';
+
+function stripBrackets(hostname) {
+  return String(hostname || '')
+    .toLowerCase()
+    .replace(/^\[|\]$/g, '');
 }
 
-export function getSubdomain() {
-  const hostname = window.location.hostname.toLowerCase();
-  const labels = hostname.split('.').filter(Boolean);
+export function isIPv4Hostname(hostname) {
+  return /^(?:\d{1,3}\.){3}\d{1,3}$/.test(stripBrackets(hostname));
+}
 
+export function isIPv6Hostname(hostname) {
+  const h = stripBrackets(hostname);
+  return h.includes(':');
+}
+
+export function isIpHostname(hostname) {
+  return isIPv4Hostname(hostname) || isIPv6Hostname(hostname);
+}
+
+export function isLocalDevHostname(hostname) {
+  const h = stripBrackets(hostname);
+  return h === 'localhost' || h.endsWith('.localhost') || isIpHostname(h);
+}
+
+/**
+ * Pure hostname → tenant slug. Empty string means apex (marketing / portal).
+ * IPv4/IPv6 addresses are never tenants (127.0.0.1 is not slug "127").
+ */
+export function subdomainFromHostname(hostname) {
+  const h = stripBrackets(hostname);
+  if (!h || isIpHostname(h)) {
+    return '';
+  }
+
+  const labels = h.split('.').filter(Boolean);
   if (labels.length <= 1) {
     return '';
   }
 
-  // phillipjames.localhost (two labels; *.localhost resolves in modern browsers)
+  // phillipjames.localhost / www.localhost
   if (labels[labels.length - 1] === 'localhost') {
     const sub = labels[0];
-    return sub === 'www' ? '' : sub;
+    return sub === 'www' || sub === 'localhost' ? '' : sub;
   }
 
-  // artist.c0ll3ct1v3.xyz (three or more labels)
-  if (labels.length >= 3) {
+  if (h === PUBLIC_SITE_DOMAIN || h === `www.${PUBLIC_SITE_DOMAIN}`) {
+    return '';
+  }
+
+  // artist.c0ll3ct1v3.xyz (hyphenated slugs allowed)
+  if (h.endsWith(`.${PUBLIC_SITE_DOMAIN}`)) {
     const sub = labels[0];
     return sub === 'www' ? '' : sub;
   }
 
-  // apex: c0ll3ct1v3.xyz, www.c0ll3ct1v3.xyz handled above as www → ''
   return '';
+}
+
+export function getSubdomain() {
+  return subdomainFromHostname(window.location.hostname);
 }
 
 export function useTenantSlug() {
@@ -47,7 +82,7 @@ export function profilePublicUrl(tenantSlug) {
   if (isLocalDevHostname(hostname)) {
     return `${protocol}//${tenantSlug}.localhost${port ? `:${port}` : ''}`;
   }
-  return `${protocol}//${tenantSlug}.c0ll3ct1v3.xyz`;
+  return `${protocol}//${tenantSlug}.${PUBLIC_SITE_DOMAIN}`;
 }
 
 /** @deprecated use profilePublicUrl */

@@ -6,14 +6,18 @@ import { epkPublicUrl } from '../hooks/useTenantSlug';
 /** Profile Studio and Data are shelved until the next release. */
 const SECTIONS = [
   { to: '/portal/vault', label: 'Vault' },
+  { to: '/portal/homebase', label: 'Homebase' },
   { to: '/portal/epk', label: 'EPK' },
+  { to: '/portal/attestation', label: 'Attestation' },
 ];
 
 function PortalLayout({ profile, children }) {
   const { logout } = useAuth0();
   const tenantSlug = profile?.tenant_slug;
   const epkUrl = tenantSlug ? `${epkPublicUrl(tenantSlug)}/epk` : null;
+  const homebaseUrl = tenantSlug ? `${epkPublicUrl(tenantSlug)}/homebase` : null;
   const epkPublished = profile?.epk_public_published;
+  const homebasePublished = profile?.homebase_published;
 
   return (
     <div className="portal-layout">
@@ -30,6 +34,11 @@ function PortalLayout({ profile, children }) {
           </div>
         </div>
         <div className="portal-header-right">
+          {homebaseUrl && homebasePublished ? (
+            <a href={homebaseUrl} target="_blank" rel="noreferrer" className="portal-link">
+              View Homebase
+            </a>
+          ) : null}
           {epkUrl && epkPublished ? (
             <a href={epkUrl} target="_blank" rel="noreferrer" className="portal-link">
               View EPK

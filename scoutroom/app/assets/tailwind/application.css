@@ -1,0 +1,30 @@
+@import "tailwindcss";
+
+@theme {
+  --font-display: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
+  --color-ink: #0c0b09;
+  --color-paper: #f4e8d0;
+  --color-paper-dim: #d9c7a3;
+  --color-rule: #3d3426;
+  --color-ember: #e8c07a;
+}
+
+html {
+  background: var(--color-ink);
+  color: var(--color-paper);
+}
+
+body {
+  min-height: 100dvh;
+}
+
+.ticket-card {
+  border: 1px solid var(--color-rule);
+  background: linear-gradient(180deg, #16130f 0%, #0c0b09 100%);
+}
+
+input, textarea, select {
+  background: #16130f;
+  color: var(--color-paper);
+  border: 1px solid var(--color-rule);
+}

@@ -5,6 +5,7 @@ import ApexRoutes from './app/routes/ApexRoutes';
 import PublicEpkRoutes from './app/routes/PublicEpkRoutes';
 import './styles/portal.css';
 import './styles/epk.css';
+import './styles/homebase.css';
 
 function App() {
   const subdomain = getSubdomain();

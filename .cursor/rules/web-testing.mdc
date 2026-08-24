@@ -1,0 +1,28 @@
+---
+description: Local Docker Compose web testing and Playwright E2E conventions
+alwaysApply: true
+---
+
+# Local web testing
+
+The local application runs through Docker Compose (`docker-compose.dev.yml`).
+
+- Start it with: `npm run dev:up` (images already built) or `npm run dev:build` then `npm run dev:up`.
+- On this WSL host, `docker compose --build` can fail because Docker Desktop's `docker-buildx` symlink is broken. Use `DOCKER_BUILDKIT=0` via `npm run dev:build`. If Compose `up` still invokes Buildx, use `docker compose -f docker-compose.dev.yml up --no-build -d` after images exist (including `c0ll3ct1v3-media-worker`).
+- Public UI URL: `http://localhost:3030` (apex). `http://127.0.0.1:3030` is also apex. Tenant pages: `http://{slug}.localhost:3030`.
+- API URL: `http://127.0.0.1:8080`
+- Check readiness before E2E tests (`curl -I http://localhost:3030` and `curl -s http://127.0.0.1:8080/health`).
+- After UI work, run: `npm run test:e2e:agent` (Chromium, JSON summary on stdout).
+- Production monitor (read-only, no agent key): `npm run test:e2e:prod`
+- Use `npm run dev:logs` to investigate server failures.
+- Do not use production credentials or destructive test data. Never run `@write` or `@auth` against production unless `E2E_AUTH_ALLOW_PROD=1`.
+- Playwright runs on the host; the app runs in Compose. Target published host ports, not container names.
+- Before finishing UI work:
+  1. Run relevant Playwright tests (`npm run test:e2e:agent`).
+  2. Use `@browser` at `http://localhost:3030` to verify the changed flow visually.
+  3. Inspect browser console errors and failed network requests.
+  4. Report commands run, the E2E summary line, and any skipped tags.
+
+Portal routes (`/portal/*`) require Auth0. Without `e2e/.env` tester creds, assert the login gate only. With `E2E_AUTH_EMAIL` / `E2E_AUTH_PASSWORD`, `@auth` tests sign in and check Vault / EPK / Attestation. Do not invent credentials. Copy `e2e/.env.example` to `e2e/.env`.
+
+Hosts: `localhost` and `127.0.0.1` are apex. `{slug}.localhost:3030` and `{slug}.c0ll3ct1v3.xyz` are tenant public profile / EPK.

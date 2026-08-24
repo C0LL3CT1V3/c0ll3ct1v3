@@ -1,0 +1,321 @@
+.homebase-page {
+  min-height: 100vh;
+  background: #0a0a0c;
+  color: #e8e8ec;
+  max-width: 42rem;
+  margin: 0 auto;
+  padding: 2.5rem 1.25rem 4rem;
+}
+
+.homebase-kicker {
+  margin: 0 0 0.35rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  font-size: 0.72rem;
+  color: #8ab4ff;
+}
+
+.homebase-name {
+  margin: 0 0 0.5rem;
+  font-size: 2.1rem;
+  color: #f5e6c8;
+}
+
+.homebase-headline {
+  margin: 0;
+  color: #a8a8b8;
+  font-size: 1.05rem;
+}
+
+.homebase-section {
+  margin-top: 2.25rem;
+}
+
+.homebase-section-title {
+  margin: 0 0 1rem;
+  font-size: 1.2rem;
+  color: #f5e6c8;
+}
+
+.homebase-cal-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.homebase-cal-month {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.homebase-cal-nav-btn {
+  background: transparent;
+  border: 1px solid #3a3a48;
+  color: #e8e8ec;
+  border-radius: 6px;
+  padding: 0.3rem 0.7rem;
+  cursor: pointer;
+}
+
+.homebase-cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 0.35rem;
+}
+
+.homebase-cal-dow {
+  text-align: center;
+  font-size: 0.7rem;
+  color: #888;
+  padding: 0.25rem 0;
+}
+
+.homebase-cal-cell {
+  min-height: 2.4rem;
+  width: 100%;
+  border-radius: 6px;
+  background: #141418;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.85rem;
+  position: relative;
+  border: 1px solid transparent;
+  color: inherit;
+  font-family: inherit;
+  padding: 0.2rem;
+}
+
+.homebase-cal-cell--empty {
+  background: transparent;
+}
+
+.homebase-cal-cell--event {
+  border-color: #4a6cf7;
+  cursor: pointer;
+}
+
+.homebase-cal-cell--event:hover,
+.homebase-cal-cell--selected {
+  background: #1c2a5c;
+  border-color: #8ab4ff;
+}
+
+.homebase-cal-dot {
+  width: 0.35rem;
+  height: 0.35rem;
+  border-radius: 50%;
+  background: #8ab4ff;
+  margin-top: 0.15rem;
+}
+
+.homebase-cal-hint {
+  color: #888;
+  font-size: 0.9rem;
+  margin: 1rem 0 0;
+}
+
+.homebase-cal-detail {
+  margin-top: 1rem;
+  padding: 0.85rem 1rem 1rem;
+  border: 1px solid #2a2a32;
+  border-radius: 8px;
+  background: #101014;
+}
+
+.homebase-cal-detail .homebase-list-title {
+  margin-top: 0;
+}
+
+.homebase-cal-detail .homebase-show-flyer {
+  width: 8.5rem;
+  height: 8.5rem;
+}
+
+.homebase-list-title {
+  margin: 1.5rem 0 0.75rem;
+  font-size: 1rem;
+}
+
+.homebase-empty {
+  color: #888;
+}
+
+.homebase-show-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.homebase-show {
+  border: 1px solid #2a2a32;
+  border-radius: 8px;
+  padding: 0.85rem 1rem;
+  background: #14141a;
+  display: flex;
+  gap: 0.85rem;
+  align-items: flex-start;
+}
+
+.homebase-show-flyer {
+  width: 5.5rem;
+  height: 5.5rem;
+  object-fit: cover;
+  border-radius: 6px;
+  flex-shrink: 0;
+  background: #1a1a22;
+}
+
+.homebase-show-body {
+  min-width: 0;
+}
+
+.homebase-show--past {
+  opacity: 0.7;
+}
+
+.homebase-show-title {
+  font-weight: 600;
+}
+
+.homebase-show-meta {
+  color: #a8a8b8;
+  font-size: 0.9rem;
+  margin-top: 0.2rem;
+}
+
+.homebase-show-notes {
+  color: #c8c8d0;
+  font-size: 0.9rem;
+  margin: 0.45rem 0 0;
+  line-height: 1.4;
+}
+
+.homebase-ticket {
+  display: inline-block;
+  margin-top: 0.5rem;
+  color: #8ab4ff;
+  text-decoration: none;
+}
+
+.homebase-ticket:hover {
+  text-decoration: underline;
+}
+
+.homebase-past {
+  margin-top: 1rem;
+}
+
+.homebase-past-toggle {
+  background: none;
+  border: none;
+  color: #8ab4ff;
+  cursor: pointer;
+  padding: 0;
+  margin-bottom: 0.75rem;
+}
+
+.homebase-tips-blurb {
+  color: #a8a8b8;
+  margin: 0 0 1rem;
+}
+
+.homebase-amount-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.homebase-amount {
+  border: 1px solid #3a3a48;
+  background: #1a1a22;
+  color: #e8e8ec;
+  border-radius: 999px;
+  padding: 0.4rem 0.9rem;
+  cursor: pointer;
+}
+
+.homebase-amount--on {
+  background: #4a6cf7;
+  border-color: #4a6cf7;
+  color: #fff;
+}
+
+.homebase-tip-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.homebase-tip-btn {
+  display: block;
+  width: 100%;
+  text-align: center;
+  background: #4a6cf7;
+  color: #fff;
+  text-decoration: none;
+  border: none;
+  border-radius: 10px;
+  padding: 0.9rem 1rem;
+  font-size: 1.05rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.homebase-tip-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.homebase-tip-btn:hover {
+  filter: brightness(1.08);
+}
+
+.portal-studio--homebase .portal-studio-panels--homebase {
+  min-height: 0;
+}
+
+.portal-studio-panels--homebase .portal-sidebar--open {
+  overflow: hidden;
+  min-height: 0;
+}
+
+.portal-studio-panels--homebase .portal-sidebar-body {
+  min-height: 0;
+}
+
+.portal-studio-panels--homebase .portal-file-list {
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.homebase-studio {
+  padding: 1rem;
+  max-width: 44rem;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.homebase-studio-subtitle {
+  margin: 1.5rem 0 0.75rem;
+  font-size: 1.05rem;
+  color: #f5e6c8;
+}
+
+.homebase-event-row {
+  border: 1px solid #2a2a32;
+  border-radius: 8px;
+  padding: 0.85rem;
+  margin-bottom: 0.75rem;
+  background: #14141a;
+}

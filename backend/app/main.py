@@ -8,9 +8,13 @@ from .api.artists.router import router as artists_router
 from .api.manager.router import router as manager_router
 from .api.media.router import router as media_router
 from .api.music.router import router as music_router
+from .api.manager.attestation_router import router as attestation_router
+from .api.rights.router import router as rights_router
 from .config import settings
 from .database import Base, engine
 from .models import account, artist, cloud_connection, document, ledger, manager, media, user, vision, wallet
+from .models import attestation as attestation_model  # noqa: F401
+from .models import store as store_model  # noqa: F401
 
 from .finance_integrations.router import router as finance_router
 from .finance_integrations.validation import validate_finance_production_config
@@ -33,6 +37,8 @@ app.include_router(auth_router)
 app.include_router(media_router)
 app.include_router(artists_router)
 app.include_router(manager_router)
+app.include_router(attestation_router)
+app.include_router(rights_router)
 app.include_router(music_router)
 if settings.finance_integrations_enabled:
     app.include_router(finance_router)
@@ -116,6 +122,10 @@ def _run_schema_migrations() -> None:
     from .db_manager_migrations import run_manager_schema_migrations
 
     run_manager_schema_migrations(engine)
+
+    from .db_attestation_migrations import run_attestation_schema_migrations
+
+    run_attestation_schema_migrations(engine)
 
 
 _run_schema_migrations()
