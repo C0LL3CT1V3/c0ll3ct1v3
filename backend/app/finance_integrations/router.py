@@ -7,6 +7,7 @@ import hashlib
 import json
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
+from sqlalchemy.orm import Session
 
 from ..config import settings
 from .audit import audit_event
@@ -27,6 +28,7 @@ from .finance_models import (
 )
 from .finance_auth import parse_allowed_methods
 from .plaid_client import create_link_token, exchange_public_token, remove_item
+from ..database import get_db
 from .webhook_utils import dedupe_event, parse_json_body, redact_payload, verify_square_signature
 
 router = APIRouter(prefix="/api/finance", tags=["finance"])
@@ -180,6 +182,7 @@ async def plaid_webhook(request: Request) -> WebhookAckResponse:
 async def square_webhook(
     request: Request,
     x_square_hmacsha256_signature: str | None = Header(default=None, alias="x-square-hmacsha256-signature"),
+    db: Session = Depends(get_db),
 ) -> WebhookAckResponse:
     raw_body = await request.body()
     if not x_square_hmacsha256_signature or not verify_square_signature(
@@ -204,4 +207,8 @@ async def square_webhook(
             "payload_redacted": json.dumps(redacted, sort_keys=True),
         },
     )
+    if not replayed:
+        from ..services.payments import mark_orders_paid_from_square_event
+
+        mark_orders_paid_from_square_event(db, payload)
     return WebhookAckResponse(accepted=True, replayed=replayed, event_id=event_id, source="square")

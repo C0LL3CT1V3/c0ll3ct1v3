@@ -5,6 +5,8 @@ import PortalLayout from '../../layouts/PortalLayout';
 import { PortalWorkbenchProvider } from '../../features/media/PortalWorkbenchProvider';
 import PortalVaultPage from './PortalVaultPage';
 import PortalEpkPage from './PortalEpkPage';
+import PortalHomebasePage from './PortalHomebasePage';
+import PortalAttestationPage from './PortalAttestationPage';
 
 function PortalShell() {
   const { profile, loading, error: profileError, refresh, updateProfile } = useArtistProfile();
@@ -24,6 +26,13 @@ function PortalShell() {
         <Routes>
           <Route index element={<Navigate to="vault" replace />} />
           <Route path="vault" element={<PortalVaultPage profile={profile} />} />
+          <Route path="attestation" element={<PortalAttestationPage />} />
+          <Route
+            path="homebase"
+            element={
+              <PortalHomebasePage profile={profile} onProfileRefresh={refresh} />
+            }
+          />
           <Route
             path="epk"
             element={

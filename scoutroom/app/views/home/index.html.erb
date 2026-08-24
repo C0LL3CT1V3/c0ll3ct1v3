@@ -1,0 +1,36 @@
+<% content_for :title, "Scoutroom" %>
+
+<p class="font-display text-3xl leading-tight">Call the next room before the room exists.</p>
+<p class="mt-3 text-sm leading-relaxed text-paper-dim">Stake points on whether an artist hits a milestone. Early, contrarian, and correct pays more points. Real money is only a tip — it never moves with the call.</p>
+
+<% if user_signed_in? %>
+  <p class="mt-6 text-xs uppercase tracking-widest text-ember"><%= points(current_user.points_balance) %> pts</p>
+<% end %>
+
+<section class="mt-10">
+  <h2 class="text-xs uppercase tracking-[0.25em] text-paper-dim">Open calls</h2>
+  <div class="mt-4 space-y-4">
+    <% @markets.each do |market| %>
+      <%= render "markets/card", market: market %>
+    <% end %>
+    <% if @markets.empty? %>
+      <p class="text-sm text-paper-dim">No open calls yet.</p>
+    <% end %>
+  </div>
+</section>
+
+<section class="mt-12">
+  <div class="flex items-baseline justify-between">
+    <h2 class="text-xs uppercase tracking-[0.25em] text-paper-dim">Scouts</h2>
+    <%= link_to "Full board", leaderboard_path, class: "text-xs text-ember" %>
+  </div>
+  <ol class="mt-4 space-y-3">
+    <% @leaderboard.each_with_index do |user, i| %>
+      <li class="flex items-center justify-between text-sm">
+        <span class="text-paper-dim"><%= i + 1 %></span>
+        <%= link_to "@#{user.handle}", profile_path(user.handle), class: "ml-3 flex-1" %>
+        <span class="text-ember"><%= Profiles::Stats.new(user).leaderboard_score %></span>
+      </li>
+    <% end %>
+  </ol>
+</section>

@@ -1,0 +1,83 @@
+<% content_for :title, @market.question %>
+
+<%= link_to artist_path(@market.artist), class: "text-[11px] uppercase tracking-[0.25em] text-ember" do %>
+  <%= @market.artist.name %>
+<% end %>
+<h1 class="mt-3 font-display text-3xl leading-tight"><%= @market.question %></h1>
+<p class="mt-3 text-sm text-paper-dim"><%= @market.resolution_criteria %></p>
+<p class="mt-2 text-xs uppercase tracking-widest text-paper-dim">Closes <%= @market.closes_at.strftime("%b %-d, %Y") %></p>
+
+<div class="mt-8 grid grid-cols-2 gap-3">
+  <div class="ticket-card p-4">
+    <p class="text-[11px] uppercase tracking-widest text-paper-dim">Yes pool</p>
+    <p class="mt-2 font-display text-3xl"><%= pool_percent(@quote.p_yes) %></p>
+    <p class="mt-1 text-xs text-paper-dim"><%= points(@market.real_yes_points) %> pts</p>
+  </div>
+  <div class="ticket-card p-4 opacity-70">
+    <p class="text-[11px] uppercase tracking-widest text-paper-dim">No pool</p>
+    <p class="mt-2 font-display text-3xl"><%= pool_percent(@quote.p_no) %></p>
+    <p class="mt-1 text-xs text-paper-dim"><%= points(@market.real_no_points) %> pts</p>
+  </div>
+</div>
+
+<% if @prediction %>
+  <div class="ticket-card mt-8 p-4">
+    <p class="text-sm">You called <span class="text-ember uppercase"><%= @prediction.side %></span> with <%= points(@prediction.points_staked) %> points.</p>
+    <% if @prediction.slip %>
+      <%= link_to "View slip", slip_path(@prediction.slip), class: "mt-3 inline-block text-xs uppercase tracking-widest text-ember" %>
+    <% end %>
+  </div>
+<% elsif @market.open_for_entry? && user_signed_in? %>
+  <%= form_with url: market_predictions_path(@market), class: "mt-8 space-y-5" do %>
+    <fieldset>
+      <legend class="text-xs uppercase tracking-widest text-paper-dim">Your call</legend>
+      <div class="mt-3 flex gap-3">
+        <label class="ticket-card flex-1 cursor-pointer p-4 text-center">
+          <input type="radio" name="side" value="yes" class="mr-2" checked>
+          Yes
+        </label>
+        <label class="ticket-card flex-1 cursor-pointer p-4 text-center opacity-70">
+          <input type="radio" name="side" value="no" class="mr-2">
+          No
+        </label>
+      </div>
+    </fieldset>
+
+    <label class="block text-xs uppercase tracking-widest text-paper-dim">
+      Points (you have <%= points(current_user.points_balance) %>)
+      <input type="number" name="points" min="1" max="<%= current_user.points_balance %>" value="<%= [50, current_user.points_balance].min %>" class="mt-2 w-full px-3 py-3">
+    </label>
+
+    <fieldset>
+      <legend class="text-xs uppercase tracking-widest text-paper-dim">Why (optional)</legend>
+      <div class="mt-3 flex flex-wrap gap-2">
+        <% Prediction::THESIS_TAGS.each do |tag| %>
+          <label class="border border-rule px-2 py-1 text-[11px] uppercase tracking-wide">
+            <input type="checkbox" name="thesis_tags[]" value="<%= tag %>" class="mr-1">
+            <%= tag_label(tag) %>
+          </label>
+        <% end %>
+      </div>
+      <input type="text" name="thesis_text" maxlength="90" placeholder="Fifteen words, max." class="mt-3 w-full px-3 py-3 text-sm">
+    </fieldset>
+
+    <button class="w-full bg-paper py-3 font-display text-ink">Lock call</button>
+    <p class="text-center text-[11px] text-paper-dim">Points are not money. Tips to the artist are a separate action.</p>
+  <% end %>
+<% elsif @market.open_for_entry? %>
+  <p class="mt-8 text-sm"><%= link_to "Sign in to call", new_user_session_path, class: "text-ember" %></p>
+<% else %>
+  <p class="mt-8 text-sm text-paper-dim">This call is <%= @market.outcome %>.</p>
+<% end %>
+
+<section class="mt-12">
+  <h2 class="text-xs uppercase tracking-[0.25em] text-paper-dim">Believers</h2>
+  <ul class="mt-3 space-y-2 text-sm">
+    <% @market.predictions.yes.includes(:user).order(:created_at).each do |prediction| %>
+      <li>
+        <%= link_to "@#{prediction.user.handle}", profile_path(prediction.user.handle) %>
+        <span class="text-paper-dim">· <%= points(prediction.points_staked) %> pts</span>
+      </li>
+    <% end %>
+  </ul>
+</section>

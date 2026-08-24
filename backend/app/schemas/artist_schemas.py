@@ -63,6 +63,7 @@ class ArtistProfileOut(BaseModel):
     epk_config: EpkConfig
     profile_published: bool = False
     epk_public_published: bool = False
+    homebase_published: bool = False
     epk_public: dict[str, Any] = Field(default_factory=dict)
 
 

@@ -1,0 +1,14 @@
+<h1 class="font-display text-3xl">In</h1>
+
+<%= form_for(resource, as: resource_name, url: session_path(resource_name), html: { class: "mt-6 space-y-4" }) do |f| %>
+  <%= f.email_field :email, autofocus: true, autocomplete: "email", placeholder: "email", class: "w-full px-3 py-3" %>
+  <%= f.password_field :password, autocomplete: "current-password", placeholder: "password", class: "w-full px-3 py-3" %>
+  <% if devise_mapping.rememberable? %>
+    <label class="flex items-center gap-2 text-sm text-paper-dim">
+      <%= f.check_box :remember_me %> remember
+    </label>
+  <% end %>
+  <%= f.submit "Log in", class: "w-full bg-paper py-3 font-display text-ink" %>
+<% end %>
+
+<p class="mt-6 text-sm"><%= render "devise/shared/links" %></p>

@@ -12,3 +12,7 @@ def public_site_origin(tenant_slug: str) -> str:
 
 def public_epk_url(tenant_slug: str) -> str:
     return f"{public_site_origin(tenant_slug)}/epk"
+
+
+def public_homebase_url(tenant_slug: str) -> str:
+    return f"{public_site_origin(tenant_slug)}/homebase"

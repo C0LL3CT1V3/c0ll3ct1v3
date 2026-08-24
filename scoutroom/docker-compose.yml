@@ -1,0 +1,26 @@
+services:
+  db:
+    image: postgres:13
+    pull_policy: never
+    environment:
+      POSTGRES_USER: scoutroom
+      POSTGRES_PASSWORD: scoutroom
+      POSTGRES_DB: scoutroom_development
+    ports:
+      - "5434:5432"
+    volumes:
+      - scoutroom_pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U scoutroom"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    pull_policy: never
+    ports:
+      - "6380:6379"
+
+volumes:
+  scoutroom_pg:

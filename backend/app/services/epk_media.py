@@ -6,7 +6,7 @@ import hashlib
 import json
 from typing import Any
 
-from fastapi import HTTPException, status
+from fastapi import HTTPException, Request, status
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session, joinedload
 
@@ -19,6 +19,32 @@ from .spaces_storage import get_s3_client, presigned_get_object
 
 STREAMING_KEYS = frozenset({"spotify", "soundcloud", "bandcamp", "youtube"})
 SOCIAL_KEYS = frozenset({"instagram", "tiktok", "twitter", "x"})
+_BOT_UA = (
+    "gptbot",
+    "chatgpt-user",
+    "claudebot",
+    "anthropic-ai",
+    "google-extended",
+    "bytespider",
+    "ccbot",
+    "amazonbot",
+    "perplexitybot",
+    "applebot-extended",
+    "facebookbot",
+    "meta-externalagent",
+    "cohere-ai",
+    "youbot",
+)
+
+
+def is_machine_request(request: Request) -> bool:
+    ua = (request.headers.get("user-agent") or "").lower()
+    if any(token in ua for token in _BOT_UA):
+        return True
+    accept = (request.headers.get("accept") or "").lower()
+    if "text/html" in accept:
+        return False
+    return "application/json" in accept
 
 
 def epk_content_hash(artist: Artist) -> str:

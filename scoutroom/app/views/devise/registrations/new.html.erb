@@ -1,0 +1,12 @@
+<h1 class="font-display text-3xl">Join</h1>
+
+<%= form_for(resource, as: resource_name, url: registration_path(resource_name), html: { class: "mt-6 space-y-4" }) do |f| %>
+  <%= render "devise/shared/error_messages", resource: resource %>
+  <%= f.text_field :handle, autofocus: true, placeholder: "handle", class: "w-full px-3 py-3" %>
+  <%= f.email_field :email, autocomplete: "email", placeholder: "email", class: "w-full px-3 py-3" %>
+  <%= f.password_field :password, autocomplete: "new-password", placeholder: "password", class: "w-full px-3 py-3" %>
+  <%= f.password_field :password_confirmation, autocomplete: "new-password", placeholder: "confirm password", class: "w-full px-3 py-3" %>
+  <%= f.submit "Create scout", class: "w-full bg-paper py-3 font-display text-ink" %>
+<% end %>
+
+<p class="mt-6 text-sm"><%= render "devise/shared/links" %></p>

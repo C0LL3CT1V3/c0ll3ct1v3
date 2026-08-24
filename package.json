@@ -1,0 +1,19 @@
+{
+  "name": "c0ll3ct1v3",
+  "private": true,
+  "scripts": {
+    "dev:up": "docker compose -f docker-compose.dev.yml up -d",
+    "dev:build": "DOCKER_BUILDKIT=0 docker build -t c0ll3ct1v3-backend ./backend && DOCKER_BUILDKIT=0 docker build -t c0ll3ct1v3-frontend ./frontend",
+    "dev:down": "docker compose -f docker-compose.dev.yml down",
+    "dev:logs": "docker compose -f docker-compose.dev.yml logs --tail=200 frontend backend",
+    "test:e2e": "E2E_ALLOW_WRITES=1 playwright test --project=chromium",
+    "test:e2e:agent": "E2E_ALLOW_WRITES=1 playwright test --project=chromium; s=$?; node e2e/helpers/print-summary.mjs; exit $s",
+    "test:e2e:prod": "E2E_BASE_URL=https://c0ll3ct1v3.xyz E2E_TENANT_URL=https://phillipjames.c0ll3ct1v3.xyz E2E_TENANT_SLUG=phillipjames playwright test --project=chromium --grep @functional --grep-invert '@write|@auth'",
+    "test:e2e:mobile": "playwright test --project=mobile",
+    "test:e2e:ui": "playwright test --ui",
+    "test:e2e:headed": "playwright test --headed"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.55.0"
+  }
+}

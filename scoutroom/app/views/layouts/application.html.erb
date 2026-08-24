@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <title><%= content_for(:title) || "Scoutroom" %></title>
+    <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="theme-color" content="#0c0b09">
+    <%= csrf_meta_tags %>
+    <%= csp_meta_tag %>
+    <%= yield :head %>
+    <link rel="icon" href="/icon.png" type="image/png">
+    <link rel="icon" href="/icon.svg" type="image/svg+xml">
+    <%= stylesheet_link_tag :app, "data-turbo-track": "reload" %>
+    <%= javascript_importmap_tags %>
+  </head>
+  <body class="min-h-dvh bg-ink text-paper antialiased">
+    <div class="mx-auto flex min-h-dvh max-w-md flex-col px-4 pb-16">
+      <header class="flex items-center justify-between py-5">
+        <%= link_to root_path, class: "font-display tracking-[0.28em] text-xs uppercase text-ember" do %>
+          Scoutroom
+        <% end %>
+        <nav class="flex items-center gap-4 text-xs uppercase tracking-widest text-paper-dim">
+          <%= link_to "Calls", markets_path %>
+          <%= link_to "Scouts", leaderboard_path %>
+          <% if user_signed_in? %>
+            <%= link_to current_user.handle, profile_path(current_user.handle) %>
+            <%= button_to "Out", destroy_user_session_path, method: :delete, class: "uppercase tracking-widest" %>
+          <% else %>
+            <%= link_to "In", new_user_session_path %>
+          <% end %>
+        </nav>
+      </header>
+
+      <% if notice.present? %>
+        <p class="mb-4 border border-rule px-3 py-2 text-sm text-ember"><%= notice %></p>
+      <% end %>
+      <% if alert.present? %>
+        <p class="mb-4 border border-red-900 px-3 py-2 text-sm text-red-300"><%= alert %></p>
+      <% end %>
+
+      <main class="flex-1">
+        <%= yield %>
+      </main>
+
+      <footer class="mt-10 border-t border-rule pt-4 text-center text-[11px] uppercase tracking-widest text-paper-dim">
+        Points have no cash value · Tips go to artists
+        <% if admin? %>
+          · <%= link_to "Admin", admin_markets_path, class: "text-ember" %>
+        <% end %>
+        <% if Rails.env.development? %>
+          · <%= link_to "IG mock", dev_ig_path, class: "text-ember" %>
+        <% end %>
+      </footer>
+    </div>
+  </body>
+</html>

@@ -1,0 +1,16 @@
+<% content_for :title, "Scouts" %>
+<h1 class="font-display text-3xl">Scouts</h1>
+<ol class="mt-6 space-y-4">
+  <% @users.each_with_index do |user, i| %>
+    <li class="flex items-baseline justify-between border-b border-rule pb-3">
+      <div>
+        <span class="text-paper-dim"><%= i + 1 %></span>
+        <%= link_to "@#{user.handle}", profile_path(user.handle), class: "ml-3" %>
+      </div>
+      <div class="text-right text-xs text-paper-dim">
+        <p class="text-ember"><%= Profiles::Stats.new(user).leaderboard_score %></p>
+        <p><%= number_to_percentage(user.accuracy * 100, precision: 0) %></p>
+      </div>
+    </li>
+  <% end %>
+</ol>

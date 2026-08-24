@@ -1,0 +1,36 @@
+<% content_for :title, @artist.name %>
+
+<h1 class="font-display text-4xl"><%= @artist.name %></h1>
+<p class="mt-2 text-xs uppercase tracking-[0.25em] text-paper-dim"><%= @artist.genre %></p>
+
+<% if params[:tip] == "thanks" %>
+  <p class="mt-4 text-sm text-ember">Boost received. That money did not touch any call.</p>
+<% end %>
+
+<% if user_signed_in? && @artist.tips_enabled? %>
+  <%= form_with url: artist_tips_path(@artist), class: "mt-8 ticket-card p-4" do %>
+    <p class="text-xs uppercase tracking-widest text-paper-dim">Boost this artist</p>
+    <input type="hidden" name="amount_cents" value="500">
+    <button class="mt-3 w-full bg-paper py-3 font-display text-ink">Tip $5</button>
+  <% end %>
+<% else %>
+  <p class="mt-8 text-sm text-paper-dim">Payouts are not connected yet. You can still call their markets.</p>
+<% end %>
+
+<section class="mt-10">
+  <h2 class="text-xs uppercase tracking-[0.25em] text-paper-dim">Calls</h2>
+  <div class="mt-4 space-y-4">
+    <% @markets.each do |market| %>
+      <%= render "markets/card", market: market %>
+    <% end %>
+  </div>
+</section>
+
+<section class="mt-10">
+  <h2 class="text-xs uppercase tracking-[0.25em] text-paper-dim">Believers</h2>
+  <ul class="mt-3 flex flex-wrap gap-2 text-sm">
+    <% @believers.each do |user| %>
+      <li><%= link_to "@#{user.handle}", profile_path(user.handle), class: "text-ember" %></li>
+    <% end %>
+  </ul>
+</section>

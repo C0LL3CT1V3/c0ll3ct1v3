@@ -61,6 +61,7 @@ class Settings(BaseSettings):
     square_application_secret: str = ""
     square_webhook_signature_key: str = ""
     square_webhook_url: str = ""
+    square_location_id: str = ""
 
     encryption_key_id: str = ""
     redact_log_secrets: bool = True
@@ -124,6 +125,13 @@ class Settings(BaseSettings):
     spotify_client_id: str = ""
     spotify_client_secret: str = ""
     lastfm_api_key: str = ""
+    # Attestation ledger (Ed25519 seed: 64-char hex). Empty = ephemeral per-process key (dev only).
+    attestation_signing_key: str = ""
+    mlc_api_base_url: str = ""
+    mlc_api_token: str = ""
+    acrcloud_access_key: str = ""
+    acrcloud_access_secret: str = ""
+    audd_api_token: str = ""
     data_retention_raw_webhook_days: int = 90
     data_retention_app_log_days: int = 30
     data_retention_audit_log_days: int = 365
