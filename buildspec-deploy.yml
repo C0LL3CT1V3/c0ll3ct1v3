@@ -1,0 +1,12 @@
+# CodeBuild deploy stage. SSM + poll; images were already pushed by the build project.
+version: 0.2
+
+env:
+  variables:
+    AWS_REGION: us-east-2
+
+phases:
+  build:
+    commands:
+      - chmod +x "$CODEBUILD_SRC_DIR/scripts/ssm-prod-up.sh"
+      - "$CODEBUILD_SRC_DIR/scripts/ssm-prod-up.sh"

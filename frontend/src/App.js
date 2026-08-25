@@ -3,6 +3,7 @@ import { BrowserRouter as Router } from 'react-router-dom';
 import { getSubdomain } from './hooks/useTenantSlug';
 import ApexRoutes from './app/routes/ApexRoutes';
 import PublicEpkRoutes from './app/routes/PublicEpkRoutes';
+import BugReportWidget from './features/bugtracker/BugReportWidget';
 import './styles/portal.css';
 import './styles/epk.css';
 import './styles/homebase.css';
@@ -13,6 +14,7 @@ function App() {
   return (
     <Router future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
       {subdomain ? <PublicEpkRoutes /> : <ApexRoutes />}
+      <BugReportWidget />
     </Router>
   );
 }

@@ -1,0 +1,43 @@
+name: Bugtracker SAM
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'infrastructure/bugtracker/**'
+      - '.github/workflows/bugtracker-sam.yml'
+  push:
+    branches: [main, develop]
+    paths:
+      - 'infrastructure/bugtracker/**'
+      - '.github/workflows/bugtracker-sam.yml'
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: infrastructure/bugtracker
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - uses: aws-actions/setup-sam@v2
+        with:
+          use-installer: true
+
+      - name: Unit tests
+        run: python -m unittest discover -s tests -v
+
+      - name: SAM validate
+        env:
+          AWS_DEFAULT_REGION: us-east-2
+        run: sam validate --lint --region us-east-2
+
+      - name: SAM build
+        env:
+          AWS_DEFAULT_REGION: us-east-2
+        run: sam build

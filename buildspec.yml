@@ -1,0 +1,47 @@
+# CodeBuild (main). Unit tests, then the same three ECR images prod-up.sh pulls on EC2.
+# Tags :latest and :$CODEBUILD_RESOLVED_SOURCE_VERSION. No Playwright here.
+version: 0.2
+
+env:
+  variables:
+    AWS_REGION: us-east-2
+    CI: "true"
+
+phases:
+  install:
+    runtime-versions:
+      nodejs: 18
+      python: 3.11
+    commands:
+      - docker --version
+      - python3 -m pip install --upgrade pip
+  pre_build:
+    commands:
+      - echo "Commit $CODEBUILD_RESOLVED_SOURCE_VERSION"
+      - docker run -d --name pg -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=test_db -p 5432:5432 public.ecr.aws/docker/library/postgres:13
+      - |
+        for i in $(seq 1 30); do
+          docker exec pg pg_isready -U postgres && break
+          sleep 2
+        done
+      - pip install -r "$CODEBUILD_SRC_DIR/backend/requirements.txt"
+      - pip install pytest pytest-cov
+      - |
+        export DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5432/test_db
+        cd "$CODEBUILD_SRC_DIR/backend"
+        pytest tests/ --cov=app --cov-report=xml
+      - |
+        cd "$CODEBUILD_SRC_DIR/frontend"
+        npm ci
+        npm test -- --coverage --watchAll=false
+  build:
+    commands:
+      - export GIT_SHA="$CODEBUILD_RESOLVED_SOURCE_VERSION"
+      - chmod +x "$CODEBUILD_SRC_DIR/scripts/push-ecr.sh"
+      - "$CODEBUILD_SRC_DIR/scripts/push-ecr.sh"
+
+artifacts:
+  files:
+    - scripts/ssm-prod-up.sh
+    - scripts/prod-up.sh
+

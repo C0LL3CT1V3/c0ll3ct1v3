@@ -1,0 +1,134 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: c0ll3ct1v3 client bugtracker — screenshot reports to GitHub Issues
+
+Globals:
+  Function:
+    Timeout: 30
+    MemorySize: 256
+    Runtime: python3.12
+    Architectures:
+      - x86_64
+
+Parameters:
+  ReportsBucketName:
+    Type: String
+    Default: ""
+    Description: Optional S3 bucket name. Leave blank for a generated unique name.
+
+  GitHubSecretArn:
+    Type: String
+    Default: ""
+    Description: Secrets Manager ARN for JSON {"token","owner","repo"}. Required for deploy.
+
+  AllowedOrigins:
+    Type: String
+    Default: "http://localhost:3030,http://127.0.0.1:3030,https://c0ll3ct1v3.xyz"
+    Description: Extra exact CORS origins (comma-separated). Tenant hosts are matched in code.
+
+Conditions:
+  HasBucketName: !Not [!Equals [!Ref ReportsBucketName, ""]]
+  HasGitHubSecret: !Not [!Equals [!Ref GitHubSecretArn, ""]]
+
+Resources:
+  ReportsBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !If [HasBucketName, !Ref ReportsBucketName, !Ref AWS::NoValue]
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        IgnorePublicAcls: true
+        BlockPublicPolicy: false
+        RestrictPublicBuckets: false
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      LifecycleConfiguration:
+        Rules:
+          - Id: ExpireReports
+            Status: Enabled
+            ExpirationInDays: 90
+            Prefix: reports/
+      CorsConfiguration:
+        CorsRules:
+          - AllowedHeaders:
+              - "*"
+            AllowedMethods:
+              - GET
+            AllowedOrigins:
+              - "http://localhost:3030"
+              - "https://c0ll3ct1v3.xyz"
+            MaxAge: 3600
+
+  ReportsBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref ReportsBucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: GitHubCamoAnonymousGet
+            Effect: Allow
+            Principal: "*"
+            Action: s3:GetObject
+            Resource: !Sub "${ReportsBucket.Arn}/reports/*"
+
+  BugtrackerApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      StageName: prod
+      DefaultRouteSettings:
+        ThrottlingBurstLimit: 10
+        ThrottlingRateLimit: 5
+
+  ReportFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/
+      Handler: handler.lambda_handler
+      Description: Store annotated screenshot and open a GitHub issue
+      Environment:
+        Variables:
+          REPORTS_BUCKET: !Ref ReportsBucket
+          GITHUB_SECRET_ARN: !Ref GitHubSecretArn
+          ALLOWED_ORIGINS: !Ref AllowedOrigins
+          PRESIGN_EXPIRES: "604800"
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - s3:PutObject
+                - s3:GetObject
+              Resource: !Sub "${ReportsBucket.Arn}/reports/*"
+            - !If
+              - HasGitHubSecret
+              - Effect: Allow
+                Action:
+                  - secretsmanager:GetSecretValue
+                Resource: !Ref GitHubSecretArn
+              - !Ref AWS::NoValue
+      Events:
+        PostReports:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BugtrackerApi
+            Path: /reports
+            Method: POST
+        OptionsReports:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BugtrackerApi
+            Path: /reports
+            Method: OPTIONS
+
+Outputs:
+  ReportApiUrl:
+    Description: POST reports here
+    Value: !Sub "https://${BugtrackerApi}.execute-api.${AWS::Region}.amazonaws.com/prod/reports"
+  ReportsBucketName:
+    Description: Screenshot bucket
+    Value: !Ref ReportsBucket
+  ReportFunctionArn:
+    Description: Lambda ARN
+    Value: !GetAtt ReportFunction.Arn

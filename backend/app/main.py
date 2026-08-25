@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import inspect, text
 
@@ -18,6 +18,7 @@ from .models import store as store_model  # noqa: F401
 
 from .finance_integrations.router import router as finance_router
 from .finance_integrations.validation import validate_finance_production_config
+from .services.deploy_gate import maybe_record_request_auth
 
 app = FastAPI(title="C0ll3CT1V3 Business Management System", version="1.0.0")
 
@@ -30,6 +31,13 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def track_deploy_auth_activity(request: Request, call_next):
+    maybe_record_request_auth(request)
+    return await call_next(request)
+
 
 # Include routers
 app.include_router(accounts_router)

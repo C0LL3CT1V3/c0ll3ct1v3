@@ -3,6 +3,9 @@ import ReactDOM from 'react-dom/client';
 import { Auth0Provider } from '@auth0/auth0-react';
 import './index.css';
 import App from './App';
+import { installConsoleBuffer } from './features/bugtracker/consoleBuffer';
+
+installConsoleBuffer();
 
 function readEnv(name) {
   return (process.env[name] || '').trim();
