@@ -1,0 +1,17 @@
+{
+  "version": "2.0",
+  "routeKey": "POST /reports",
+  "rawPath": "/reports",
+  "headers": {
+    "content-type": "application/json",
+    "origin": "http://localhost:3030"
+  },
+  "requestContext": {
+    "http": {
+      "method": "POST",
+      "path": "/reports"
+    }
+  },
+  "isBase64Encoded": false,
+  "body": "{\"image_data_url\":\"data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wCEAAkGBwgHBgkIBwgKCgkLDRYPDQwMDRsUFRAWIB0iIiAdHx8kKDQsJCYxJx8fLT0tMTU3Ojo6Iys/RD84QzQ5OjcBCgoKDQwNGg8PGjclHyU3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3N//AABEIAAEAAQMBEQACEQEDEQH/xAAXAAADAQAAAAAAAAAAAAAAAAABAgME/8QAFhABAQEAAAAAAAAAAAAAAAAAABEB/8QAFQEBAQAAAAAAAAAAAAAAAAAAAAX/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIQAxAAAAGfP//Z\",\"summary\":\"Curl plumbing check — widget screenshot pipeline\",\"type\":\"bug\",\"page_url\":\"http://localhost:3030/\",\"viewport\":{\"w\":1440,\"h\":900,\"dpr\":1},\"user_agent\":\"curl/8\",\"console_errors\":[]}"
+}

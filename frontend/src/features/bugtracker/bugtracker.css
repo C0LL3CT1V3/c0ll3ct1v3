@@ -1,0 +1,165 @@
+.bugtracker-trigger {
+  position: fixed;
+  right: 1.25rem;
+  bottom: 1.25rem;
+  z-index: 12000;
+  border: 1px solid #2a2a32;
+  background: #1a1a20;
+  color: #e8e8ec;
+  font: 600 0.75rem/1 system-ui, sans-serif;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 0.65rem 0.85rem;
+  border-radius: 999px;
+  cursor: pointer;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+
+.bugtracker-trigger:hover,
+.bugtracker-trigger:focus-visible {
+  background: #24242c;
+  outline: 2px solid #6b8afd;
+  outline-offset: 2px;
+}
+
+.bugtracker-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 13000;
+  background: rgba(8, 8, 10, 0.72);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+}
+
+.bugtracker-modal {
+  width: min(32rem, 100%);
+  max-height: calc(100vh - 3rem);
+  overflow: auto;
+  background: #141418;
+  color: #e8e8ec;
+  border: 1px solid #2a2a32;
+  border-radius: 12px;
+  padding: 1.25rem 1.35rem 1.1rem;
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+}
+
+.bugtracker-modal h2 {
+  margin: 0;
+  font-size: 1.15rem;
+}
+
+.bugtracker-lead {
+  margin: 0.5rem 0 1rem;
+  color: #a8a8b8;
+  font-size: 0.875rem;
+  line-height: 1.45;
+}
+
+.bugtracker-preview {
+  display: block;
+  width: 100%;
+  max-height: 12rem;
+  object-fit: contain;
+  background: #0c0c0f;
+  border: 1px solid #2a2a32;
+  border-radius: 8px;
+  margin-bottom: 1rem;
+}
+
+.bugtracker-types {
+  border: 0;
+  margin: 0 0 0.85rem;
+  padding: 0;
+  display: flex;
+  gap: 1rem;
+}
+
+.bugtracker-types legend {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+}
+
+.bugtracker-types label {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.875rem;
+}
+
+.bugtracker-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  font-size: 0.8rem;
+  color: #a8a8b8;
+}
+
+.bugtracker-summary textarea {
+  width: 100%;
+  box-sizing: border-box;
+  resize: vertical;
+  min-height: 6rem;
+  padding: 0.65rem 0.7rem;
+  border-radius: 8px;
+  border: 1px solid #2a2a32;
+  background: #0c0c0f;
+  color: #e8e8ec;
+  font: inherit;
+}
+
+.bugtracker-error {
+  color: #f07178;
+  font-size: 0.85rem;
+  margin: 0.75rem 0 0;
+}
+
+.bugtracker-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.6rem;
+  margin-top: 1rem;
+}
+
+.bugtracker-primary,
+.bugtracker-secondary {
+  border-radius: 8px;
+  font: 600 0.85rem/1 system-ui, sans-serif;
+  padding: 0.55rem 0.9rem;
+  cursor: pointer;
+}
+
+.bugtracker-primary {
+  border: 0;
+  background: #e8e8ec;
+  color: #111;
+}
+
+.bugtracker-secondary {
+  border: 1px solid #2a2a32;
+  background: transparent;
+  color: #e8e8ec;
+}
+
+.bugtracker-primary:disabled,
+.bugtracker-secondary:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+.bugtracker-toast {
+  position: fixed;
+  right: 1.25rem;
+  bottom: 4.5rem;
+  z-index: 12000;
+  background: #1a1a20;
+  border: 1px solid #2a2a32;
+  color: #e8e8ec;
+  padding: 0.55rem 0.8rem;
+  border-radius: 8px;
+  font-size: 0.8rem;
+}

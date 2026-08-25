@@ -1,0 +1,14 @@
+version = 0.1
+
+[default.deploy.parameters]
+stack_name = "c0ll3ct1v3-bugtracker-dev"
+resolve_s3 = true
+s3_prefix = "c0ll3ct1v3-bugtracker-dev"
+region = "us-east-2"
+confirm_changeset = true
+capabilities = "CAPABILITY_IAM"
+parameter_overrides = "ReportsBucketName=\"\" GitHubSecretArn=\"arn:aws:secretsmanager:us-east-2:756090160994:secret:c0ll3ct1v3/bugtracker/github-GkS82x\" AllowedOrigins=\"http://localhost:3030,http://127.0.0.1:3030,https://c0ll3ct1v3.xyz\""
+image_repositories = []
+
+[default.global.parameters]
+region = "us-east-2"

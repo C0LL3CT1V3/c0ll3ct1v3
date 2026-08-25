@@ -102,3 +102,6 @@ backend/var/
 
 # Manager EPK CLI state
 scripts/.state/
+
+# SAM
+.aws-sam/
