@@ -1,0 +1,397 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  c0ll3ct1v3 main-branch pipeline. GitHub → CodeBuild (test + ECR :latest and :sha)
+  → manual approval → SSM rolling prod-up on the existing Compose EC2 box. Not ECS.
+
+Parameters:
+  GitHubConnectionArn:
+    Type: String
+    Description: CodeConnections / CodeStar connection ARN (us-east-2) after the GitHub handshake.
+
+  GitHubOwner:
+    Type: String
+    Default: C0LL3CT1V3
+
+  GitHubRepo:
+    Type: String
+    Default: c0ll3ct1v3
+
+  GitHubBranch:
+    Type: String
+    Default: main
+
+  Ec2InstanceId:
+    Type: String
+    Default: i-08e02bc6466d72442
+    AllowedPattern: "^i-[0-9a-fA-F]+$"
+
+  DeployPath:
+    Type: String
+    Default: /home/ubuntu/c0ll3ct1v3
+    AllowedValues:
+      - /home/ubuntu/c0ll3ct1v3
+
+  FrontendBuildSecretArn:
+    Type: String
+    Description: Secrets Manager ARN. JSON keys listed in infrastructure/pipeline/README.md.
+
+Resources:
+  ArtifactBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "c0ll3ct1v3-pipeline-${AWS::AccountId}-${AWS::Region}"
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      VersioningConfiguration:
+        Status: Enabled
+      LifecycleConfiguration:
+        Rules:
+          - Id: ExpireArtifacts
+            Status: Enabled
+            ExpirationInDays: 30
+            NoncurrentVersionExpiration:
+              NoncurrentDays: 14
+
+  BuildLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /aws/codebuild/c0ll3ct1v3-prod-build
+      RetentionInDays: 30
+
+  DeployLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /aws/codebuild/c0ll3ct1v3-prod-deploy
+      RetentionInDays: 30
+
+  PipelineRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: c0ll3ct1v3-pipeline-role
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: codepipeline.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: pipeline
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: Artifacts
+                Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:GetObjectVersion
+                  - s3:GetBucketVersioning
+                  - s3:PutObject
+                  - s3:ListBucket
+                Resource:
+                  - !GetAtt ArtifactBucket.Arn
+                  - !Sub "${ArtifactBucket.Arn}/*"
+              - Sid: UseGitHubConnection
+                Effect: Allow
+                Action:
+                  - codestar-connections:UseConnection
+                  - codeconnections:UseConnection
+                Resource: !Ref GitHubConnectionArn
+              - Sid: StartBuilds
+                Effect: Allow
+                Action:
+                  - codebuild:BatchGetBuilds
+                  - codebuild:StartBuild
+                Resource:
+                  - !GetAtt BuildProject.Arn
+                  - !GetAtt DeployProject.Arn
+
+  BuildRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: c0ll3ct1v3-codebuild-build
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: codebuild.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: build
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: Logs
+                Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource:
+                  - !GetAtt BuildLogGroup.Arn
+                  - !Sub "${BuildLogGroup.Arn}:*"
+              - Sid: Artifacts
+                Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:GetObjectVersion
+                  - s3:PutObject
+                  - s3:ListBucket
+                Resource:
+                  - !GetAtt ArtifactBucket.Arn
+                  - !Sub "${ArtifactBucket.Arn}/*"
+              - Sid: EcrAuth
+                Effect: Allow
+                Action:
+                  - ecr:GetAuthorizationToken
+                Resource: "*"
+              - Sid: EcrPushThreeRepos
+                Effect: Allow
+                Action:
+                  - ecr:BatchCheckLayerAvailability
+                  - ecr:CompleteLayerUpload
+                  - ecr:DescribeRepositories
+                  - ecr:BatchGetImage
+                  - ecr:GetDownloadUrlForLayer
+                  - ecr:InitiateLayerUpload
+                  - ecr:PutImage
+                  - ecr:UploadLayerPart
+                Resource:
+                  - !Sub "arn:${AWS::Partition}:ecr:${AWS::Region}:${AWS::AccountId}:repository/c0ll3ct1v3-backend"
+                  - !Sub "arn:${AWS::Partition}:ecr:${AWS::Region}:${AWS::AccountId}:repository/c0ll3ct1v3-frontend"
+                  - !Sub "arn:${AWS::Partition}:ecr:${AWS::Region}:${AWS::AccountId}:repository/c0ll3ct1v3-worker"
+              - Sid: FrontendBuildSecret
+                Effect: Allow
+                Action:
+                  - secretsmanager:GetSecretValue
+                Resource:
+                  - !Ref FrontendBuildSecretArn
+                  - !Sub "${FrontendBuildSecretArn}*"
+
+  DeployRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: c0ll3ct1v3-codebuild-deploy
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: codebuild.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: deploy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: Logs
+                Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource:
+                  - !GetAtt DeployLogGroup.Arn
+                  - !Sub "${DeployLogGroup.Arn}:*"
+              - Sid: Artifacts
+                Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:GetObjectVersion
+                  - s3:PutObject
+                  - s3:ListBucket
+                Resource:
+                  - !GetAtt ArtifactBucket.Arn
+                  - !Sub "${ArtifactBucket.Arn}/*"
+              - Sid: SendCommandThisInstanceAndDocument
+                Effect: Allow
+                Action:
+                  - ssm:SendCommand
+                Resource:
+                  - !Sub "arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:instance/${Ec2InstanceId}"
+                  - !Sub "arn:${AWS::Partition}:ssm:${AWS::Region}::document/AWS-RunShellScript"
+              - Sid: ReadCommandInvocation
+                Effect: Allow
+                Action:
+                  - ssm:GetCommandInvocation
+                  - ssm:ListCommandInvocations
+                Resource: "*"
+
+  BuildProject:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Name: c0ll3ct1v3-prod-build
+      Description: Test and push c0ll3ct1v3 backend/frontend/worker images
+      ServiceRole: !GetAtt BuildRole.Arn
+      Artifacts:
+        Type: CODEPIPELINE
+      Source:
+        Type: CODEPIPELINE
+        BuildSpec: buildspec.yml
+      Environment:
+        Type: LINUX_CONTAINER
+        ComputeType: BUILD_GENERAL1_LARGE
+        Image: aws/codebuild/standard:7.0
+        PrivilegedMode: true
+        EnvironmentVariables:
+          - Name: AWS_REGION
+            Value: !Ref AWS::Region
+          - Name: AWS_ACCOUNT
+            Value: !Ref AWS::AccountId
+          - Name: REACT_APP_AUTH0_DOMAIN
+            Type: SECRETS_MANAGER
+            Value: !Sub "${FrontendBuildSecretArn}:REACT_APP_AUTH0_DOMAIN"
+          - Name: REACT_APP_AUTH0_CLIENT_ID
+            Type: SECRETS_MANAGER
+            Value: !Sub "${FrontendBuildSecretArn}:REACT_APP_AUTH0_CLIENT_ID"
+          - Name: REACT_APP_AUTH0_AUDIENCE
+            Type: SECRETS_MANAGER
+            Value: !Sub "${FrontendBuildSecretArn}:REACT_APP_AUTH0_AUDIENCE"
+          - Name: REACT_APP_AUTH0_SCOPE
+            Type: SECRETS_MANAGER
+            Value: !Sub "${FrontendBuildSecretArn}:REACT_APP_AUTH0_SCOPE"
+          - Name: REACT_APP_AUTH0_MFA_ACR
+            Type: SECRETS_MANAGER
+            Value: !Sub "${FrontendBuildSecretArn}:REACT_APP_AUTH0_MFA_ACR"
+          - Name: REACT_APP_DROPBOX_APP_KEY
+            Type: SECRETS_MANAGER
+            Value: !Sub "${FrontendBuildSecretArn}:REACT_APP_DROPBOX_APP_KEY"
+          - Name: REACT_APP_GOOGLE_CLIENT_ID
+            Type: SECRETS_MANAGER
+            Value: !Sub "${FrontendBuildSecretArn}:REACT_APP_GOOGLE_CLIENT_ID"
+          - Name: REACT_APP_GOOGLE_API_KEY
+            Type: SECRETS_MANAGER
+            Value: !Sub "${FrontendBuildSecretArn}:REACT_APP_GOOGLE_API_KEY"
+          - Name: REACT_APP_GOOGLE_APP_ID
+            Type: SECRETS_MANAGER
+            Value: !Sub "${FrontendBuildSecretArn}:REACT_APP_GOOGLE_APP_ID"
+          - Name: REACT_APP_DEFAULT_TENANT
+            Type: SECRETS_MANAGER
+            Value: !Sub "${FrontendBuildSecretArn}:REACT_APP_DEFAULT_TENANT"
+          - Name: REACT_APP_BUGTRACKER_URL
+            Type: SECRETS_MANAGER
+            Value: !Sub "${FrontendBuildSecretArn}:REACT_APP_BUGTRACKER_URL"
+      TimeoutInMinutes: 90
+      QueuedTimeoutInMinutes: 180
+      LogsConfig:
+        CloudWatchLogs:
+          Status: ENABLED
+          GroupName: !Ref BuildLogGroup
+
+  DeployProject:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Name: c0ll3ct1v3-prod-deploy
+      Description: SSM rolling prod-up on the Compose EC2 instance
+      ServiceRole: !GetAtt DeployRole.Arn
+      Artifacts:
+        Type: CODEPIPELINE
+      Source:
+        Type: CODEPIPELINE
+        BuildSpec: buildspec-deploy.yml
+      Environment:
+        Type: LINUX_CONTAINER
+        ComputeType: BUILD_GENERAL1_SMALL
+        Image: aws/codebuild/standard:7.0
+        PrivilegedMode: false
+        EnvironmentVariables:
+          - Name: AWS_REGION
+            Value: !Ref AWS::Region
+          - Name: EC2_INSTANCE_ID
+            Value: !Ref Ec2InstanceId
+          - Name: DEPLOY_PATH
+            Value: !Ref DeployPath
+      TimeoutInMinutes: 30
+      QueuedTimeoutInMinutes: 60
+      LogsConfig:
+        CloudWatchLogs:
+          Status: ENABLED
+          GroupName: !Ref DeployLogGroup
+
+  Pipeline:
+    Type: AWS::CodePipeline::Pipeline
+    Properties:
+      Name: c0ll3ct1v3-prod
+      RoleArn: !GetAtt PipelineRole.Arn
+      PipelineType: V2
+      ExecutionMode: SUPERSEDED
+      ArtifactStore:
+        Type: S3
+        Location: !Ref ArtifactBucket
+      Stages:
+        - Name: Source
+          Actions:
+            - Name: GitHub
+              ActionTypeId:
+                Category: Source
+                Owner: AWS
+                Provider: CodeStarSourceConnection
+                Version: "1"
+              Configuration:
+                ConnectionArn: !Ref GitHubConnectionArn
+                FullRepositoryId: !Sub "${GitHubOwner}/${GitHubRepo}"
+                BranchName: !Ref GitHubBranch
+                OutputArtifactFormat: CODE_ZIP
+                DetectChanges: "true"
+              OutputArtifacts:
+                - Name: SourceOutput
+        - Name: Build
+          Actions:
+            - Name: TestAndPushEcr
+              ActionTypeId:
+                Category: Build
+                Owner: AWS
+                Provider: CodeBuild
+                Version: "1"
+              Configuration:
+                ProjectName: !Ref BuildProject
+              InputArtifacts:
+                - Name: SourceOutput
+              OutputArtifacts:
+                - Name: BuildOutput
+        - Name: Approve
+          Actions:
+            - Name: ManualApproval
+              ActionTypeId:
+                Category: Approval
+                Owner: AWS
+                Provider: Manual
+                Version: "1"
+              Configuration:
+                CustomData: >-
+                  Images are in ECR (:latest and :sha). Approval runs a rolling
+                  recreate of backend/worker/frontend on the single EC2 box.
+                  db/redis stay up. Brief API 502 is possible. Do not approve if
+                  an artist is mid-upload or actively in the portal.
+        - Name: Deploy
+          Actions:
+            - Name: SsmProdUp
+              ActionTypeId:
+                Category: Build
+                Owner: AWS
+                Provider: CodeBuild
+                Version: "1"
+              Configuration:
+                ProjectName: !Ref DeployProject
+              InputArtifacts:
+                - Name: SourceOutput
+
+Outputs:
+  PipelineName:
+    Value: !Ref Pipeline
+  PipelineUrl:
+    Value: !Sub "https://${AWS::Region}.console.aws.amazon.com/codesuite/codepipeline/pipelines/${Pipeline}/view"
+  ArtifactBucketName:
+    Value: !Ref ArtifactBucket
+  BuildProjectName:
+    Value: !Ref BuildProject
+  DeployProjectName:
+    Value: !Ref DeployProject

@@ -42,6 +42,13 @@ export REACT_APP_GOOGLE_CLIENT_ID="${REACT_APP_GOOGLE_CLIENT_ID:-}"
 export REACT_APP_GOOGLE_API_KEY="${REACT_APP_GOOGLE_API_KEY:-}"
 export REACT_APP_GOOGLE_APP_ID="${REACT_APP_GOOGLE_APP_ID:-}"
 export REACT_APP_DEFAULT_TENANT="${REACT_APP_DEFAULT_TENANT:-}"
+export REACT_APP_BUGTRACKER_URL="${REACT_APP_BUGTRACKER_URL:-}"
+
+GIT_SHA="${GIT_SHA:-${CODEBUILD_RESOLVED_SOURCE_VERSION:-}}"
+if [[ -n "$GIT_SHA" && ! "$GIT_SHA" =~ ^[0-9a-fA-F]{7,40}$ ]]; then
+  echo "WARN: ignoring invalid GIT_SHA=$GIT_SHA" >&2
+  GIT_SHA=""
+fi
 
 if [[ -z "$REACT_APP_DROPBOX_APP_KEY" || -z "$REACT_APP_GOOGLE_CLIENT_ID" ]]; then
   echo "ERROR: Cloud import keys missing. Ensure frontend/.env exists in $ROOT with REACT_APP_DROPBOX_APP_KEY and REACT_APP_GOOGLE_*." >&2
@@ -85,12 +92,22 @@ docker build --no-cache "${BUILD_OPTS[@]}" -f frontend/Dockerfile.prod \
   --build-arg REACT_APP_GOOGLE_API_KEY \
   --build-arg REACT_APP_GOOGLE_APP_ID \
   --build-arg REACT_APP_DEFAULT_TENANT \
+  --build-arg REACT_APP_BUGTRACKER_URL \
   -t c0ll3ct1v3-frontend:latest ./frontend
 
-for name in backend frontend worker; do
+push_repo_tags() {
+  local name="$1"
   docker tag "c0ll3ct1v3-${name}:latest" "$REGISTRY/c0ll3ct1v3-${name}:latest"
-  # Retry push once on ECR layer digest mismatch (corrupt/incomplete upload).
-  if ! docker push "$REGISTRY/c0ll3ct1v3-${name}:latest"; then
+  docker push "$REGISTRY/c0ll3ct1v3-${name}:latest"
+  if [[ -n "$GIT_SHA" ]]; then
+    docker tag "c0ll3ct1v3-${name}:latest" "$REGISTRY/c0ll3ct1v3-${name}:${GIT_SHA}"
+    docker push "$REGISTRY/c0ll3ct1v3-${name}:${GIT_SHA}"
+  fi
+}
+
+for name in backend frontend worker; do
+  # Retry the whole tag/push once on ECR layer digest mismatch (corrupt/incomplete upload).
+  if ! push_repo_tags "$name"; then
     echo "WARN: push failed for ${name}; rebuilding and retrying once..." >&2
     case "$name" in
       backend) docker build "${BUILD_OPTS[@]}" -f backend/Dockerfile.prod -t "c0ll3ct1v3-${name}:latest" ./backend ;;
@@ -108,12 +125,16 @@ for name in backend frontend worker; do
           --build-arg REACT_APP_GOOGLE_API_KEY \
           --build-arg REACT_APP_GOOGLE_APP_ID \
           --build-arg REACT_APP_DEFAULT_TENANT \
+          --build-arg REACT_APP_BUGTRACKER_URL \
           -t "c0ll3ct1v3-${name}:latest" ./frontend
         ;;
     esac
-    docker tag "c0ll3ct1v3-${name}:latest" "$REGISTRY/c0ll3ct1v3-${name}:latest"
-    docker push "$REGISTRY/c0ll3ct1v3-${name}:latest"
+    push_repo_tags "$name"
   fi
 done
 
-echo "Pushed to $REGISTRY"
+if [[ -n "$GIT_SHA" ]]; then
+  echo "Pushed to $REGISTRY (:latest and :$GIT_SHA)"
+else
+  echo "Pushed to $REGISTRY (:latest only; set GIT_SHA to also tag the commit)"
+fi
