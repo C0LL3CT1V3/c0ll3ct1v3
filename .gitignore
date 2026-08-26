@@ -99,6 +99,9 @@ prometheus_data/
 grafana_data/
 backend/.venv/
 backend/var/
+backend/.coverage
+backend/coverage.xml
+backend/.pytest_cache/
 
 # Manager EPK CLI state
 scripts/.state/

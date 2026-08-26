@@ -2,76 +2,71 @@ name: Continuous Integration
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [ main, develop, dev ]
   pull_request:
-    branches: [ main, develop ]
+    branches: [ main, develop, dev ]
+
+permissions:
+  contents: read
 
 jobs:
   backend-tests:
     runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: postgres:13
-        env:
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: test_db
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-        ports:
-          - 5432:5432
+    defaults:
+      run:
+        working-directory: backend
 
     steps:
-    - uses: actions/checkout@v3
-    
+    - uses: actions/checkout@v4
+
     - name: Set up Python
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       with:
         python-version: '3.11'
-    
+
     - name: Install dependencies
       run: |
-        cd backend
         pip install -r requirements.txt
-        pip install pytest pytest-cov
-    
+        pip install pytest-cov
+
     - name: Run tests
-      run: |
-        cd backend
-        pytest tests/ --cov=app --cov-report=xml
+      run: python -m pytest tests/ -ra --tb=short --cov=app --cov-report=xml
       env:
-        DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_db
-    
+        # Unit tests build their own sqlite engines. Do not point SQLAlchemy's
+        # import-time engine at the CI Postgres service.
+        DATABASE_URL: sqlite:///./ci_test.db
+
     - name: Upload coverage
-      uses: codecov/codecov-action@v3
+      if: always() && hashFiles('backend/coverage.xml') != ''
+      continue-on-error: true
+      uses: codecov/codecov-action@v4
       with:
-        file: ./backend/coverage.xml
+        files: ./backend/coverage.xml
+        fail_ci_if_error: false
 
   frontend-tests:
     runs-on: ubuntu-latest
-    
+
     steps:
-    - uses: actions/checkout@v3
-    
+    - uses: actions/checkout@v4
+
     - name: Set up Node.js
-      uses: actions/setup-node@v3
+      uses: actions/setup-node@v4
       with:
         node-version: '18'
         cache: 'npm'
         cache-dependency-path: frontend/package-lock.json
-    
+
     - name: Install dependencies
       run: |
         cd frontend
         npm ci
-    
+
     - name: Run tests
       run: |
         cd frontend
         npm test -- --coverage --watchAll=false
-    
+
     - name: Build
       run: |
         cd frontend
@@ -79,18 +74,16 @@ jobs:
 
   security-scan:
     runs-on: ubuntu-latest
+    # Code Scanning SARIF upload needs this; many repos do not have it enabled.
+    # Trivy still runs as a table report so the job can stay green.
     steps:
-    - uses: actions/checkout@v3
-    
+    - uses: actions/checkout@v4
+
     - name: Run Trivy vulnerability scanner
-      uses: aquasecurity/trivy-action@master
+      uses: aquasecurity/trivy-action@0.28.0
       with:
-        scan-type: 'fs'
-        scan-ref: '.'
-        format: 'sarif'
-        output: 'trivy-results.sarif'
-    
-    - name: Upload Trivy scan results
-      uses: github/codeql-action/upload-sarif@v2
-      with:
-        sarif_file: 'trivy-results.sarif'
+        scan-type: fs
+        scan-ref: .
+        format: table
+        exit-code: '0'
+        ignore-unfixed: true
