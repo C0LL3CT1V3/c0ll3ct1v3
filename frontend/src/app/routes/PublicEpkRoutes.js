@@ -8,8 +8,10 @@ function PublicEpkRoutes() {
   return (
     <Routes>
       <Route path="/epk" element={<BookerEpkPage />} />
+      <Route path="/epk/" element={<BookerEpkPage />} />
       <Route path="/epk/*" element={<BookerEpkPage />} />
       <Route path="/homebase" element={<ArtistHomebasePage />} />
+      <Route path="/homebase/" element={<ArtistHomebasePage />} />
       <Route path="/homebase/*" element={<ArtistHomebasePage />} />
       <Route path="/" element={<ArtistProfilePage />} />
     </Routes>
