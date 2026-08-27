@@ -1,5 +1,6 @@
 import { getConsoleErrors, installConsoleBuffer, resetConsoleBufferForTests } from './consoleBuffer';
 import { buildReportPayload, FIXTURE_JPEG } from './submitReport';
+import { MAX_EDGE, scaledSize, toJpegDataUrl } from './toJpegDataUrl';
 
 describe('consoleBuffer', () => {
   beforeEach(() => {
@@ -34,5 +35,19 @@ describe('buildReportPayload', () => {
     expect(payload.viewport.w).toEqual(expect.any(Number));
     expect(payload.user_agent).toEqual(expect.any(String));
     expect(Array.isArray(payload.console_errors)).toBe(true);
+  });
+});
+
+describe('toJpegDataUrl', () => {
+  test('scaledSize leaves small frames alone', () => {
+    expect(scaledSize(800, 600)).toEqual({ width: 800, height: 600 });
+  });
+
+  test('scaledSize caps the long edge', () => {
+    expect(scaledSize(3840, 2160)).toEqual({ width: MAX_EDGE, height: 1080 });
+  });
+
+  test('rejects empty input', async () => {
+    await expect(toJpegDataUrl('')).rejects.toThrow(/empty/i);
   });
 });
