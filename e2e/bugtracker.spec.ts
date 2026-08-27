@@ -11,10 +11,10 @@ test.describe('client bugtracker widget', { tag: ['@apex'] }, () => {
 
   test('opens a fixture modal and submits a mocked report', async ({ page }) => {
     const errors = attachPageErrorCollector(page, {
-      ignoreUrl: [/\/__bugtracker-reports/i],
+      ignoreUrl: [/\/__bugtracker-reports/i, /\/prod\/reports/i, /execute-api/i],
     });
 
-    await page.route('**/__bugtracker-reports', async (route) => {
+    const fulfillReport = async (route) => {
       const body = route.request().postDataJSON();
       expect(body.summary).toMatch(/vault/i);
       expect(body.type).toBe('bug');
@@ -25,7 +25,9 @@ test.describe('client bugtracker widget', { tag: ['@apex'] }, () => {
         contentType: 'application/json',
         body: JSON.stringify({ ok: true, issue_url: 'https://github.com/example/c0ll3ct1v3/issues/1' }),
       });
-    });
+    };
+    await page.route('**/__bugtracker-reports', fulfillReport);
+    await page.route('**/prod/reports', fulfillReport);
 
     await page.goto('/?bugtracker=1', { waitUntil: 'domcontentloaded' });
     await expect(page.getByTestId('bugtracker-modal')).toBeVisible();

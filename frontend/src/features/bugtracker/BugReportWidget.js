@@ -1,7 +1,7 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import Shotmark from 'shotmark';
 import BugReportModal from './BugReportModal';
-import { captureScreenshot } from './captureScreenshot';
-import { openAnnotator } from './openAnnotator';
+import { toJpegDataUrl } from './toJpegDataUrl';
 import {
   FIXTURE_JPEG,
   bugtrackerQueryEnabled,
@@ -13,6 +13,7 @@ import './bugtracker.css';
 
 export default function BugReportWidget() {
   const enabled = widgetEnabled();
+  const triggerRef = useRef(null);
   const [hiddenForCapture, setHiddenForCapture] = useState(false);
   const [imageDataUrl, setImageDataUrl] = useState('');
   const [summary, setSummary] = useState('');
@@ -29,20 +30,31 @@ export default function BugReportWidget() {
     setSubmitting(false);
   }, []);
 
-  const onTrigger = async () => {
+  const onTrigger = () => {
     setToast('');
+    setError('');
     setHiddenForCapture(true);
-    try {
-      const raw = await captureScreenshot();
-      const annotated = await openAnnotator(raw);
-      setImageDataUrl(annotated);
-    } catch (err) {
-      if (!err?.cancelled) {
-        setToast(err.message || 'Screenshot cancelled');
-      }
-    } finally {
-      setHiddenForCapture(false);
-    }
+    Shotmark.start({
+      trigger: triggerRef.current || undefined,
+      locale: 'en-US',
+      theme: 'dark',
+      format: 'jpeg',
+      zIndex: 12500,
+      actions: ['cancel', 'confirm'],
+      onShot: async (res) => {
+        try {
+          const jpeg = await toJpegDataUrl(res?.image);
+          setImageDataUrl(jpeg);
+        } catch (err) {
+          setToast(err.message || 'Screenshot failed');
+        } finally {
+          setHiddenForCapture(false);
+        }
+      },
+      onCancel: () => {
+        setHiddenForCapture(false);
+      },
+    });
   };
 
   useEffect(() => {
@@ -71,18 +83,21 @@ export default function BugReportWidget() {
 
   if (!enabled) return null;
 
+  const showTrigger = !hiddenForCapture && !imageDataUrl;
+
   return (
     <>
-      {!hiddenForCapture && !imageDataUrl ? (
-        <button
-          type="button"
-          className="bugtracker-trigger"
-          data-testid="bugtracker-trigger"
-          onClick={onTrigger}
-        >
-          Report
-        </button>
-      ) : null}
+      <button
+        ref={triggerRef}
+        type="button"
+        className="bugtracker-trigger"
+        data-testid="bugtracker-trigger"
+        onClick={onTrigger}
+        hidden={!showTrigger}
+        aria-hidden={!showTrigger}
+      >
+        Report
+      </button>
       {imageDataUrl ? (
         <BugReportModal
           imageDataUrl={imageDataUrl}

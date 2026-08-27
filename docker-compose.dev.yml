@@ -110,7 +110,8 @@ services:
       - WDS_SOCKET_HOST=localhost
       - WDS_SOCKET_PORT=3030
       
-    command: sh -c "npm ci && npm start"
+    # Image still has a leftover Vite tsconfig; CRA refuses to start with both.
+    command: sh -c "rm -f /app/tsconfig.json && npm ci && npm start"
 
   
 
