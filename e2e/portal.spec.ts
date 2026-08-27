@@ -25,7 +25,7 @@ test.describe('signed-in portal', { tag: ['@functional', '@auth'] }, () => {
     await expect(nav.getByRole('link', { name: 'Attestation', exact: true })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Vault' })).toBeVisible();
     await expect(page.locator('body')).toContainText(/All your IP in one place/i);
-    await expect(page.getByText('Choose files')).toBeVisible();
+    await expect(page.getByText('From Device')).toBeVisible();
     await expect(page.getByRole('button', { name: /new folder/i })).toBeVisible();
     await expect(page.locator('body')).not.toContainText(/Not signed in or session expired/i);
     await expect(page.locator('body')).not.toContainText(/Failed to load workbench/i);

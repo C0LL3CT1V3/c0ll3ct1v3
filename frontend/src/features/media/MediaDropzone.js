@@ -13,6 +13,7 @@ import {
   pickGooglePickerEntries,
 } from './cloudChoosers';
 import { guessAssetType, uploadFileToSpaces } from './mediaUpload';
+import { DropboxLogo, GoogleLogo } from './CloudLogos';
 
 function MediaDropzone({ apiClient, tenantSlug, onUploaded, onError }) {
   const [dragOver, setDragOver] = useState(false);
@@ -109,8 +110,8 @@ function MediaDropzone({ apiClient, tenantSlug, onUploaded, onError }) {
       }}
     >
       <div className="media-upload-actions">
-        <label className="portal-btn portal-btn--ghost media-file-label">
-          Choose files
+        <label className="portal-btn media-upload-btn media-upload-btn--files media-file-label">
+          From Device
           <input
             type="file"
             multiple
@@ -123,20 +124,22 @@ function MediaDropzone({ apiClient, tenantSlug, onUploaded, onError }) {
         </label>
         <button
           type="button"
-          className="portal-btn portal-btn--ghost media-cloud-btn"
+          className="portal-btn media-upload-btn media-upload-btn--dropbox"
           disabled={uploading || !dropboxEnabled}
           onClick={handleDropbox}
           title={dropboxEnabled ? 'Import from Dropbox (official Chooser)' : dropboxDisabledReason}
         >
+          <DropboxLogo />
           Dropbox
         </button>
         <button
           type="button"
-          className="portal-btn portal-btn--ghost media-cloud-btn"
+          className="portal-btn media-upload-btn media-upload-btn--google"
           disabled={uploading || !googleEnabled}
           onClick={handleGoogleDrive}
           title={googleEnabled ? 'Import from Google Drive (official Picker)' : googleDisabledReason}
         >
+          <GoogleLogo />
           Google Drive
         </button>
       </div>

@@ -812,17 +812,65 @@
 .media-upload-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.4rem;
+  gap: 0.5rem;
   justify-content: center;
 }
 
-.media-cloud-btn {
-  font-size: 0.8rem;
-  padding: 0.4rem 0.65rem;
+.media-upload-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  padding: 0.5rem 0.85rem;
+  border-width: 1px;
+  border-style: solid;
 }
 
-.media-cloud-btn:disabled {
-  opacity: 0.45;
+.media-upload-btn--files {
+  background: #f4f4f8;
+  border-color: #f4f4f8;
+  color: #121218;
+}
+
+.media-upload-btn--files:hover,
+.media-upload-btn--files:focus-visible {
+  background: #fff;
+  border-color: #fff;
+}
+
+.media-upload-btn--dropbox {
+  background: #0061ff;
+  border-color: #0061ff;
+  color: #fff;
+}
+
+.media-upload-btn--dropbox:hover:not(:disabled),
+.media-upload-btn--dropbox:focus-visible:not(:disabled) {
+  background: #0b57d0;
+  border-color: #0b57d0;
+}
+
+.media-upload-btn--google {
+  background: #fff;
+  border-color: #dadce0;
+  color: #1f1f1f;
+}
+
+.media-upload-btn--google:hover:not(:disabled),
+.media-upload-btn--google:focus-visible:not(:disabled) {
+  background: #f8f9fa;
+  border-color: #c6c8cc;
+}
+
+.media-cloud-logo {
+  display: block;
+  flex-shrink: 0;
+}
+
+.media-upload-btn:disabled {
+  opacity: 0.55;
   cursor: not-allowed;
 }
 
